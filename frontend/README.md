@@ -26,7 +26,7 @@ npm install
 npm run dev        # → http://localhost:5173
 ```
 
-> **Note**: The backend must be running at `http://localhost:3000` (or set `VITE_BACKEND_URL` in `.env`).
+> **Note**: The backend must be running at `http://localhost:3000` for local dev (or set `VITE_API_BASE_URL`, `VITE_SOCKET_URL`, `VITE_SOCKET_PATH` in `.env`).
 
 ## Architecture
 
@@ -71,7 +71,10 @@ See [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) for the full system d
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_BACKEND_URL` | `http://localhost:3000` | Backend Socket.IO server URL |
+| `VITE_BASE_PATH` | `/` | Frontend routing/build base path |
+| `VITE_API_BASE_URL` | `http://localhost:3000` | API request base URL |
+| `VITE_SOCKET_URL` | `http://localhost:3000` | Socket.IO server origin |
+| `VITE_SOCKET_PATH` | `/socket.io` | Socket.IO path |
 | `VITE_APP_NAME` | `BattleBrain` | App display name |
 | `VITE_USE_MOCK_SOCKET` | `true` | Use frontend mock battle socket flow until backend socket is ready |
 | `VITE_USE_MOCK_API` | `false` | Set to `true` to use hardcoded records API data |

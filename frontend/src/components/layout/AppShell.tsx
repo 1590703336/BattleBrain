@@ -84,7 +84,7 @@ export default function AppShell({ children }: AppShellProps) {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full px-3 py-1.5 text-white/70 transition hover:text-white"
+                className="rounded-full border border-red-400/60 bg-red-500/85 px-3 py-1.5 font-semibold text-white transition hover:bg-red-500"
               >
                 Logout
               </button>

@@ -55,6 +55,8 @@ export default function BattlePage() {
     opponent,
     myHp,
     opponentHp,
+    myRole,
+    opponentRole,
     messages,
     timer,
     stats,
@@ -71,6 +73,8 @@ export default function BattlePage() {
       opponent: state.opponent,
       myHp: state.myHp,
       opponentHp: state.opponentHp,
+      myRole: state.myRole,
+      opponentRole: state.opponentRole,
       messages: state.messages,
       timer: state.timer,
       stats: state.stats,
@@ -91,6 +95,8 @@ export default function BattlePage() {
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
   const [sending, setSending] = useState(false);
   const [waitingOpponent, setWaitingOpponent] = useState(false);
+  const [resultWinner, setResultWinner] = useState<'me' | 'opponent' | 'draw' | null>(null);
+  const [didRequestSurrender, setDidRequestSurrender] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -162,10 +168,13 @@ export default function BattlePage() {
     };
 
     const onEnd = (payload: BattleEndPayload) => {
+      const resolvedWinner = payload.reason === 'surrender' && didRequestSurrender ? 'opponent' : payload.winner;
       endBattle(payload);
-      saveCurrentResult({ winner: payload.winner });
+      saveCurrentResult({ winner: resolvedWinner });
+      setResultWinner(resolvedWinner);
       setSending(false);
       setWaitingOpponent(false);
+      setDidRequestSurrender(false);
       resetMatchQueue();
       socket.emit('leave-queue', {});
       socket.emit('get-cards', {});
@@ -202,6 +211,7 @@ export default function BattlePage() {
     buffs.meme,
     buffs.pun,
     buffs.dodge,
+    didRequestSurrender,
   ]);
 
   useEffect(() => {
@@ -241,16 +251,19 @@ export default function BattlePage() {
     }
     endSoundPlayedRef.current = true;
 
-    if (myHp > opponentHp) {
+    const winner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
+    if (winner === 'me') {
       playVictory();
     } else {
       playDefeat();
     }
-  }, [status, myHp, opponentHp, playVictory, playDefeat]);
+  }, [status, myHp, opponentHp, resultWinner, playVictory, playDefeat]);
 
   useEffect(() => {
     if (status === 'active') {
       endSoundPlayedRef.current = false;
+      setResultWinner(null);
+      setDidRequestSurrender(false);
     }
   }, [status]);
 
@@ -306,6 +319,7 @@ export default function BattlePage() {
 
     socket.emit('leave-queue', {});
     socket.emit('surrender-battle', { battleId });
+    setDidRequestSurrender(true);
     setToast('Surrender requested...');
   };
 
@@ -316,8 +330,9 @@ export default function BattlePage() {
   }, [timer]);
 
   const showEndModal = status === 'ended';
-  const endTitle = myHp > opponentHp ? 'You Win' : myHp < opponentHp ? 'You Lose' : 'Draw';
-  const endTone = myHp > opponentHp ? 'text-lime-200' : myHp < opponentHp ? 'text-rose-200' : 'text-cyan-100';
+  const effectiveWinner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
+  const endTitle = effectiveWinner === 'me' ? 'You Win' : effectiveWinner === 'opponent' ? 'You Lose' : 'Draw';
+  const endTone = effectiveWinner === 'me' ? 'text-lime-200' : effectiveWinner === 'opponent' ? 'text-rose-200' : 'text-cyan-100';
 
   const arenaPressure = Math.max(0, Math.min(100, Math.round((1 - timer / 90) * 100)));
 
@@ -361,6 +376,19 @@ export default function BattlePage() {
       <Card className="relative overflow-hidden p-3 md:p-5">
         <p className="font-semibold text-white/85">Topic</p>
         <p className="mt-1 text-sm text-[var(--color-neon-cyan)] md:text-base">{topic}</p>
+
+        {myRole && (
+          <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
+            <div className="text-left">
+              <p className="text-[10px] uppercase tracking-wider text-white/45">Your Stance</p>
+              <p className="bg-gradient-to-r from-lime-300 to-emerald-300 bg-clip-text text-sm font-bold text-transparent">{myRole}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-white/45">Enemy Stance</p>
+              <p className="bg-gradient-to-r from-rose-300 to-pink-300 bg-clip-text text-sm font-bold text-transparent">{opponentRole}</p>
+            </div>
+          </div>
+        )}
       </Card>
 
       <div className="grid gap-3 md:grid-cols-[1.5fr_1fr]">
@@ -420,9 +448,8 @@ export default function BattlePage() {
                 animate={{ opacity: 1, y: -34, scale: 1 }}
                 exit={{ opacity: 0, y: -56, scale: 1.05 }}
                 transition={{ duration: reducedMotion ? 0.1 : 0.5 }}
-                className={`pointer-events-none absolute z-[var(--z-overlay)] text-2xl font-black ${
-                  burst.tone === 'toxic' ? 'text-rose-300' : burst.tone === 'good' ? 'text-lime-300' : 'text-cyan-200'
-                } ${burst.target === 'me' ? 'left-12 top-28' : 'right-12 top-28'}`}
+                className={`pointer-events-none absolute z-[var(--z-overlay)] text-2xl font-black ${burst.tone === 'toxic' ? 'text-rose-300' : burst.tone === 'good' ? 'text-lime-300' : 'text-cyan-200'
+                  } ${burst.target === 'me' ? 'left-12 top-28' : 'right-12 top-28'}`}
               >
                 -{burst.value}
               </motion.div>

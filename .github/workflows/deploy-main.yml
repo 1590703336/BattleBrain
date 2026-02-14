@@ -1,0 +1,62 @@
+name: Deploy BattleBrain (main)
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: battlebrain-production-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+
+            REPO_DIR="${{ secrets.SERVER_PROJECT_PATH }}"
+            if [ ! -d "$REPO_DIR/.git" ]; then
+              echo "Missing git repository: $REPO_DIR"
+              exit 1
+            fi
+
+            cd "$REPO_DIR"
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            if [ ! -f backend/.env ]; then
+              echo "Missing backend/.env on server"
+              exit 1
+            fi
+
+            if [ ! -f frontend/.env.production ]; then
+              echo "Missing frontend/.env.production on server"
+              exit 1
+            fi
+
+            cd backend
+            npm ci --omit=dev
+            cd ../frontend
+            npm ci
+            npm run build
+            cd ..
+
+            if ! command -v pm2 >/dev/null 2>&1; then
+              echo "pm2 is required on server"
+              exit 1
+            fi
+
+            pm2 restart battlebrain-backend --update-env || pm2 start npm --name "battlebrain-backend" --cwd "$REPO_DIR/backend" -- start
+            pm2 save

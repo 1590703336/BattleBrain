@@ -2,14 +2,20 @@ import { BattleHistoryResponse } from '../types/socket';
 import { AuthSessionPayload, UserProfile } from '../types/user';
 import { getStoredToken } from '../utils/authStorage';
 
-const baseUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
+function stripTrailingSlash(value: string) {
+  return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+const apiBaseUrl = stripTrailingSlash(
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '/battlebrain' : 'http://localhost:3000')
+);
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === 'true';
 
 const mockBattleHistory: BattleHistoryResponse[] = [
   {
     id: 'hist_1',
     battleId: 'b_demo_1',
-    topic: 'If your ex texted at 2AM, what is your opening line?',
+    topic: 'Pineapple belongs on pizza',
     winner: 'opponent',
     stats: {
       myDamage: 72,
@@ -24,7 +30,7 @@ const mockBattleHistory: BattleHistoryResponse[] = [
   {
     id: 'hist_2',
     battleId: 'b_demo_2',
-    topic: 'Pitch your worst startup idea with confidence.',
+    topic: 'Cats are better pets than dogs',
     winner: 'me',
     stats: {
       myDamage: 104,
@@ -46,7 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers,
   });
