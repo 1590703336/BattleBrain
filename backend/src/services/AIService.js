@@ -78,13 +78,6 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
 
     async generateBotReply({ topic, botName, personaPrompt, currentMessage, context = [], battleState = {} }) {
         try {
-            const recentAssistantLines = context
-                .filter((entry) => entry.role === 'assistant')
-                .slice(-4)
-                .map((entry) => String(entry.content || '').trim())
-                .filter(Boolean)
-                .join('\n');
-
             // Build HP context so the AI can adapt tone based on who's winning
             const myHp = battleState.myHp ?? '?';
             const opponentHp = battleState.opponentHp ?? '?';
@@ -102,54 +95,65 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
                 }
             }
 
+            const systemPrompt = `
+You are ${botName}, the AI debate assistant inside BattleBrain.
+Your job:
+- Generate creative, context-aware, and dynamic debate replies.
+- Always respect the debate topic: "${topic}".
+- Score the user message for wit, relevance, toxicity, and calculate damage.
+- Flag off-topic or inappropriate messages (sexual, violent, slurs) and assign damage to the sender.
+- Avoid repeating previous AI responses.
+- Adapt tone, style, and creativity to the flow of the battle.
+
+Persona: ${personaPrompt}
+Tone Guidance: ${toneGuidance}
+
+Output JSON ONLY in this format:
+{
+  "aiReply": "string (plain text, max 220 chars, NO quotes)",
+  "wit": number (0-100 score of opponent),
+  "relevance": number (0-100 score of opponent),
+  "toxicity": number (0-100 score of opponent),
+  "damage": number (0-100 calculated damage to opponent),
+  "strikeType": "good" | "toxic" | "neutral",
+  "flagged": boolean,
+  "reasoning": "string (brief chain of thought about why you chose this reply)"
+}
+`;
+
             const response = await this.client.chat.completions.create({
                 model: this.model,
                 messages: [
-                    {
-                        role: 'system',
-                        content: `You are ${botName}, a debate opponent in a live 1v1 battle game.
-${personaPrompt}
-
-Core behavior:
-1. Read the opponent's ACTUAL message. Identify the specific claim, analogy, or logic they used.
-2. Attack THAT specific point — quote or paraphrase their words, then dismantle them.
-3. Tie your counter-argument back to the debate topic: "${topic}".
-4. Adapt your energy to the battle state. ${toneGuidance}
-5. Be creative — use humor, wit, wordplay, analogies, rhetorical questions, or absurd comparisons.
-6. NEVER repeat a structure or opener you already used. Each reply must feel completely fresh.
-7. If the opponent's message is low-effort or off-topic, call that out cleverly instead of ignoring it.
-8. If the opponent is being toxic, deflect with wit — do not escalate.
-
-Hard rules:
-- No slurs, hate speech, threats, or sexual content.
-- Write 1-2 compact sentences, max 220 characters.
-- Output plain text only, no quotes, no JSON.
-- STRICTLY NO CLICHES or canned responses.
-- NEVER repeat a structure or opener you already used.`
-                    },
+                    { role: 'system', content: systemPrompt },
                     ...context.slice(-8).map((entry) => ({
                         role: entry.role === 'assistant' ? 'assistant' : 'user',
                         content: String(entry.content || '')
                     })),
                     {
                         role: 'user',
-                        content: `${hpContext}
-Opponent just said: "${currentMessage || '(nothing yet)'}"
-${recentAssistantLines ? `Your previous replies (DO NOT repeat these patterns):\n${recentAssistantLines}` : ''}
-
-Respond now. Attack their specific argument about "${topic}". Be dynamic and original.`
+                        content: `HP context: ${hpContext}\nOpponent just said: "${currentMessage}"\nRespond now. Attack their specific argument about "${topic}".`
                     }
                 ],
+                response_format: { type: 'json_object' },
                 temperature: 0.9,
                 top_p: 0.95,
-                max_tokens: 140
+                max_tokens: 450
             });
 
             const content = response.choices?.[0]?.message?.content;
-            const text = typeof content === 'string' ? content.trim() : '';
-            // Strip any wrapping quotes the model might add
-            const cleaned = text.replace(/^["']|["']$/g, '');
-            return cleaned.slice(0, 220);
+            if (!content) return '';
+
+            const result = JSON.parse(content);
+
+            // Log the AI's "internal thoughts" for debugging
+            logger.info({
+                botName,
+                reasoning: result.reasoning,
+                scores: { wit: result.wit, relevance: result.relevance, toxicity: result.toxicity }
+            }, 'AI Bot Reply Generated');
+
+            return String(result.aiReply || '').trim();
+
         } catch (err) {
             logger.warn({ err, botName }, 'AI bot reply generation failed');
             return '';
