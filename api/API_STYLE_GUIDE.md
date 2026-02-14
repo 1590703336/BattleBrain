@@ -5,20 +5,20 @@ This guide outlines the standards for documenting APIs in the BattleBrain projec
 ## 1. Guiding Principles
 
 -   **Contract First**: Define the API input/output *before* implementing logic.
--   **RESTful**: Use standard HTTP methods (`GET`, `POST`, `PUT`, `DELETE`) and status codes.
+-   **RESTful**: Use standard HTTP methods (`GET`, `POST`, `PUT`, `DELETE`) and status codes for HTTP endpoints.
+-   **Event-Based**: For real-time features, use Socket.IO events with clear payload definitions.
 -   **JSON First**: All request bodies and response payloads must be valid JSON.
--   **Screaming Snake Case**: Environment variables and constants.
 -   **Camel Case**: JSON keys (`userId`, `battleId`).
 
 ## 2. File Organization
 
 API documentation should be stored in this `api/` directory.
--   `api/README.md`: Index of all available endpoints.
+-   `api/README.md` or `api/Endpoints.md`: Index of all available endpoints.
 -   `api/resources/`: Detailed specs for complex resources (optional).
 
-## 3. Documentation Template
+## 3. HTTP Documentation Template
 
-For every endpoint, use the following Markdown template:
+For every HTTP endpoint, use the following Markdown template:
 
 ```markdown
 ### [METHOD] /api/path/to/resource
@@ -51,10 +51,8 @@ For every endpoint, use the following Markdown template:
 
 ```json
 {
-  "data": {
-    "id": "123",
-    "field_name": "value"
-  }
+  "id": "123",
+  "field_name": "value"
 }
 ```
 
@@ -62,46 +60,90 @@ For every endpoint, use the following Markdown template:
 
 ```json
 {
-  "error": {
-    "code": "INVALID_INPUT",
-    "message": "Field 'field_name' is required."
-  }
+  "error": "Field 'field_name' is required."
 }
 ```
 ```
 
-## 4. Standard Response Formats
+## 4. Socket.IO Documentation Template
 
-All API responses should follow a consistent envelope structure.
+For real-time events, distinguish between Client->Server (Emits) and Server->Client (Listeners).
 
-### Success Response
+### Client -> Server (Emit)
+
+```markdown
+#### `event-name`
+
+Description of what this event triggers.
+
+**Emit**:
+```javascript
+socket.emit('event-name', payload);
+```
+
+**Payload**:
 ```json
 {
-  "data": { ... },     // The actual resource or result
-  "meta": { ... }      // Optional: pagination details, timestamps
+  "field": "value"
+}
+```
+
+**Server Response Events**:
+- `response-event-1`
+- `response-event-2`
+```
+
+### Server -> Client (Listen)
+
+```markdown
+#### `event-name`
+
+Description of when the server sends this event.
+
+**Listen**:
+```javascript
+socket.on('event-name', (data) => { ... });
+```
+
+**Payload**:
+```json
+{
+  "field": "value"
+}
+```
+```
+
+## 5. Standard Response Formats
+
+### Success Response
+Return a flat JSON object containing the resource or result.
+
+```json
+{
+  "id": "123",
+  "name": "Object Name",
+  "createdAt": "2023-01-01T00:00:00Z"
 }
 ```
 
 ### Error Response
+Use appropriate HTTP status codes (400, 401, 404, 500). The body *may* contain an error message or code.
+
 ```json
 {
-  "error": {
-    "code": "ERROR_CODE_STRING",  // e.g., "USER_NOT_FOUND"
-    "message": "Human readable message.",
-    "details": { ... }            // Optional: validation errors
-  }
+  "error": "Human readable message",
+  "code": "OPTIONAL_ERROR_CODE"
 }
 ```
 
-## 5. HTTP Status Codes
+## 6. HTTP Status Codes
 
 | Code | Meaning | Usage |
 |------|---------|-------|
 | `200` | OK | Standard success. |
-| `201` | Created | Resource successfully created (e.g., after POST). |
-| `400` | Bad Request | Client sent invalid JSON or missing fields. |
-| `401` | Unauthorized | Missing or invalid authentication token. |
-| `403` | Forbidden | Authenticated, but permissions denied. |
+| `201` | Created | Resource successfully created. |
+| `400` | Bad Request | Invalid input. |
+| `401` | Unauthorized | Missing/Invalid token. |
 | `404` | Not Found | Resource does not exist. |
 | `429` | Too Many Requests | Rate limit exceeded. |
-| `500` | Internal Server Error | Something went wrong on the server. |
+| `500` | Internal Server Error | Server issues. |
