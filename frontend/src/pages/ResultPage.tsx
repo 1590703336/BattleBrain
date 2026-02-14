@@ -6,6 +6,7 @@ import Badge from '../components/common/Badge';
 import Card from '../components/common/Card';
 import { ApiService } from '../services/ApiService';
 import { BattleHistoryItem, useBattleStore } from '../stores/battleStore';
+import { useMatchStore } from '../stores/matchStore';
 import { BattleHistoryResponse } from '../types/socket';
 
 interface UnifiedRecord {
@@ -50,6 +51,7 @@ function toUnifiedFromApi(item: BattleHistoryResponse): UnifiedRecord {
 
 export default function ResultPage() {
   const navigate = useNavigate();
+  const resetMatchQueue = useMatchStore((state) => state.reset);
   const { myHp, opponentHp, stats, history, resetCurrent } = useBattleStore(
     useShallow((state) => ({
       myHp: state.myHp,
@@ -123,6 +125,7 @@ export default function ResultPage() {
         stats={displayStats}
         onReplay={() => {
           resetCurrent();
+          resetMatchQueue();
           navigate('/match');
         }}
       />

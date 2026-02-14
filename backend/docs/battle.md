@@ -64,8 +64,8 @@ Or for length violation:
 
 Scoring and HP rules (percentage-based):
 - `wit`, `relevance`, `toxicity` are `0-100`.
-- `toxic`: when `toxicity >= 60`, damage = `toxicity` and target = sender (`damageTarget: "me"`).
-- `good`: when `wit >= 50` and `relevance >= 50` (and not toxic), damage = `round(wit * 0.55 + relevance * 0.45)` and target = opponent.
+- `toxic`: when `toxicity >= 60`, damage = `round(toxicity * 0.2)` and target = sender (`damageTarget: "me"`).
+- `good`: when `wit >= 40` and `relevance >= 40` (and not toxic), damage = `round((wit * 0.6 + relevance * 0.4) * 0.35)` and target = opponent.
 - `neutral`: otherwise, `damage = 0`, `damageTarget = null`.
 
 ### `battle-end`
