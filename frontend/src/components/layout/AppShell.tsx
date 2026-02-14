@@ -21,7 +21,7 @@ export default function AppShell({ children }: AppShellProps) {
           <Link to="/" className="font-[var(--font-display)] text-xl tracking-[0.12em] text-[var(--color-neon-cyan)]">
             BATTLEBRAIN
           </Link>
-          <nav className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1 text-sm">
+          <nav className="flex max-w-[70vw] items-center gap-2 overflow-x-auto rounded-full border border-white/10 bg-white/5 p-1 text-sm whitespace-nowrap">
             <Link
               to="/"
               className={`rounded-full px-3 py-1.5 transition ${
@@ -39,6 +39,22 @@ export default function AppShell({ children }: AppShellProps) {
               }`}
             >
               Arena
+            </Link>
+            <Link
+              to="/leaderboard"
+              className={`rounded-full px-3 py-1.5 transition ${
+                location.pathname.startsWith('/leaderboard') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'
+              }`}
+            >
+              Leaderboard
+            </Link>
+            <Link
+              to="/profile"
+              className={`rounded-full px-3 py-1.5 transition ${
+                location.pathname.startsWith('/profile') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'
+              }`}
+            >
+              Profile
             </Link>
           </nav>
         </div>

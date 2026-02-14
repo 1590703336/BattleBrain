@@ -164,7 +164,29 @@ Response:
 - Unknown `battleId` in `send-message` should emit a recoverable error event (or silently ignore).
 - Disconnect/reconnect should rehydrate battle state (recommended): send latest snapshot + recent messages.
 
-## 6. Compatibility Notes
+## 6. Leaderboard API (Phase 2 frontend uses this now)
+
+### `GET /api/leaderboard`
+
+Response:
+```json
+[
+  {
+    "rank": 1,
+    "id": "u_17",
+    "name": "VoltJester",
+    "level": 22,
+    "xp": 9120,
+    "winRate": 72
+  }
+]
+```
+
+Notes:
+- Sorted by `xp` descending.
+- `winRate` is integer percentage.
+
+## 7. Compatibility Notes
 
 Frontend files bound to this contract:
 - `frontend/src/types/socket.ts`

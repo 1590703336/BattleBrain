@@ -2,8 +2,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import AppShell from './components/layout/AppShell';
 import BattlePage from './pages/BattlePage';
+import LeaderboardPage from './pages/LeaderboardPage';
 import LandingPage from './pages/LandingPage';
 import MatchPage from './pages/MatchPage';
+import ProfilePage from './pages/ProfilePage';
 import ResultPage from './pages/ResultPage';
 import { pageMotion } from './utils/motion';
 
@@ -26,6 +28,8 @@ function AnimatedRoutes() {
           <Route path="/battle/:id" element={<BattlePage />} />
           <Route path="/result" element={<Navigate to="/result/demo" replace />} />
           <Route path="/result/:id" element={<ResultPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </motion.div>
