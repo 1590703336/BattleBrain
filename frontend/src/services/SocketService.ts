@@ -13,6 +13,9 @@ import {
 import { getStoredToken, getStoredUser } from '../utils/authStorage';
 
 const USE_MOCK_SOCKET = import.meta.env.VITE_USE_MOCK_SOCKET !== 'false';
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ?? (import.meta.env.PROD ? window.location.origin : 'http://localhost:3000');
+const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH ?? (import.meta.env.PROD ? '/battlebrain/socket.io' : '/socket.io');
 const GOOD_STRIKE_THRESHOLD = 40;
 const TOXIC_STRIKE_THRESHOLD = 60;
 
@@ -82,9 +85,10 @@ class SocketService {
       return;
     }
 
-    this.socket = io(import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000', {
+    this.socket = io(SOCKET_URL, {
       autoConnect: true,
       transports: ['websocket'],
+      path: SOCKET_PATH,
       reconnection: true,
       reconnectionAttempts: 8,
       reconnectionDelay: 500,
@@ -785,16 +789,6 @@ class MockBattleGateway {
       'That attempt had passion and absolutely no brakes.',
       'Strong opener. Weak warranty.',
     ];
-  }
-
-  private generateMockTopic(opponentName: string) {
-    const subjects = ['group chat etiquette', 'office meme policy', 'late-night text strategy', 'playlist politics'];
-    const twists = ['is pure performance art', 'should be legally audited', 'is a social red flag', 'decides relationship survival'];
-    const constraints = ['in 2026', 'before coffee', 'under public pressure', 'after one viral post'];
-    const subject = subjects[Math.floor(Math.random() * subjects.length)];
-    const twist = twists[Math.floor(Math.random() * twists.length)];
-    const constraint = constraints[Math.floor(Math.random() * constraints.length)];
-    return `${opponentName} claims ${subject} ${twist} ${constraint}`;
   }
 
   private clearQueueTimer() {

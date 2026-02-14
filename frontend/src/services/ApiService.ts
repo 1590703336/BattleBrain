@@ -2,7 +2,13 @@ import { BattleHistoryResponse } from '../types/socket';
 import { AuthSessionPayload, UserProfile } from '../types/user';
 import { getStoredToken } from '../utils/authStorage';
 
-const baseUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
+function stripTrailingSlash(value: string) {
+  return value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+const apiBaseUrl = stripTrailingSlash(
+  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.PROD ? '/battlebrain' : 'http://localhost:3000')
+);
 const useMockApi = import.meta.env.VITE_USE_MOCK_API === 'true';
 
 const mockBattleHistory: BattleHistoryResponse[] = [
@@ -46,7 +52,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers,
   });

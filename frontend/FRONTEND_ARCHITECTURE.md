@@ -445,5 +445,8 @@ sequenceDiagram
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `VITE_BACKEND_URL` | No | `http://localhost:3000` | Backend server URL for Socket.IO |
+| `VITE_BASE_PATH` | No | `/` | Frontend router/build base path |
+| `VITE_API_BASE_URL` | No | `http://localhost:3000` | API request base URL |
+| `VITE_SOCKET_URL` | No | `http://localhost:3000` | Socket.IO server origin |
+| `VITE_SOCKET_PATH` | No | `/socket.io` | Socket.IO path |
 | `VITE_APP_NAME` | No | `BattleBrain` | App display name |
