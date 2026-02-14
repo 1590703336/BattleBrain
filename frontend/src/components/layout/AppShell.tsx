@@ -65,6 +65,14 @@ export default function AppShell({ children }: AppShellProps) {
               Leaderboard
             </Link>
             <Link
+              to="/result/demo"
+              className={`rounded-full px-3 py-1.5 transition ${
+                location.pathname.startsWith('/result') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'
+              }`}
+            >
+              Results
+            </Link>
+            <Link
               to="/profile"
               className={`rounded-full px-3 py-1.5 transition ${
                 location.pathname.startsWith('/profile') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'
@@ -76,7 +84,7 @@ export default function AppShell({ children }: AppShellProps) {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-full px-3 py-1.5 text-white/70 transition hover:text-white"
+                className="rounded-full border border-red-400/60 bg-red-500/85 px-3 py-1.5 font-semibold text-white transition hover:bg-red-500"
               >
                 Logout
               </button>

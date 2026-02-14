@@ -11,6 +11,7 @@ import { BattleHistoryResponse } from '../types/socket';
 
 interface UnifiedRecord {
   id: string;
+  battleId: string;
   topic: string;
   winner: 'me' | 'opponent' | 'draw';
   finishedAt: number;
@@ -28,6 +29,7 @@ interface UnifiedRecord {
 function toUnifiedFromStore(item: BattleHistoryItem): UnifiedRecord {
   return {
     id: item.id,
+    battleId: item.battleId,
     topic: item.topic,
     winner: item.winner,
     finishedAt: item.finishedAt,
@@ -40,6 +42,7 @@ function toUnifiedFromStore(item: BattleHistoryItem): UnifiedRecord {
 function toUnifiedFromApi(item: BattleHistoryResponse): UnifiedRecord {
   return {
     id: item.id,
+    battleId: item.battleId,
     topic: item.topic,
     winner: item.winner,
     finishedAt: new Date(item.finishedAt).getTime(),
@@ -95,10 +98,15 @@ export default function ResultPage() {
     const remote = apiHistory.map(toUnifiedFromApi);
     const map = new Map<string, UnifiedRecord>();
 
-    [...local, ...remote].forEach((record) => {
-      if (!map.has(record.id)) {
-        map.set(record.id, record);
-      }
+    local.forEach((record) => {
+      const key = record.battleId || record.id;
+      map.set(key, record);
+    });
+
+    // Prefer backend-persisted records over local transient copies for same battle.
+    remote.forEach((record) => {
+      const key = record.battleId || record.id;
+      map.set(key, record);
     });
 
     return Array.from(map.values())
@@ -143,7 +151,7 @@ export default function ResultPage() {
         ) : (
           <ul className="space-y-2">
             {mergedRecords.map((item) => (
-              <li key={item.id} className="rounded-xl border border-white/12 bg-black/20 px-3 py-2">
+              <li key={item.battleId || item.id} className="rounded-xl border border-white/12 bg-black/20 px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
                   <span>{new Date(item.finishedAt).toLocaleString()}</span>
                   <span>

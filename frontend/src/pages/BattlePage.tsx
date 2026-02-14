@@ -95,6 +95,8 @@ export default function BattlePage() {
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
   const [sending, setSending] = useState(false);
   const [waitingOpponent, setWaitingOpponent] = useState(false);
+  const [resultWinner, setResultWinner] = useState<'me' | 'opponent' | 'draw' | null>(null);
+  const [didRequestSurrender, setDidRequestSurrender] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -166,11 +168,15 @@ export default function BattlePage() {
     };
 
     const onEnd = (payload: BattleEndPayload) => {
+      const resolvedWinner = payload.reason === 'surrender' && didRequestSurrender ? 'opponent' : payload.winner;
       endBattle(payload);
-      saveCurrentResult({ winner: payload.winner });
+      saveCurrentResult({ winner: resolvedWinner });
+      setResultWinner(resolvedWinner);
       setSending(false);
       setWaitingOpponent(false);
+      setDidRequestSurrender(false);
       resetMatchQueue();
+      socket.emit('leave-queue', {});
       socket.emit('get-cards', {});
     };
 
@@ -205,6 +211,7 @@ export default function BattlePage() {
     buffs.meme,
     buffs.pun,
     buffs.dodge,
+    didRequestSurrender,
   ]);
 
   useEffect(() => {
@@ -244,16 +251,19 @@ export default function BattlePage() {
     }
     endSoundPlayedRef.current = true;
 
-    if (myHp > opponentHp) {
+    const winner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
+    if (winner === 'me') {
       playVictory();
     } else {
       playDefeat();
     }
-  }, [status, myHp, opponentHp, playVictory, playDefeat]);
+  }, [status, myHp, opponentHp, resultWinner, playVictory, playDefeat]);
 
   useEffect(() => {
     if (status === 'active') {
       endSoundPlayedRef.current = false;
+      setResultWinner(null);
+      setDidRequestSurrender(false);
     }
   }, [status]);
 
@@ -307,7 +317,9 @@ export default function BattlePage() {
       return;
     }
 
+    socket.emit('leave-queue', {});
     socket.emit('surrender-battle', { battleId });
+    setDidRequestSurrender(true);
     setToast('Surrender requested...');
   };
 
@@ -318,8 +330,9 @@ export default function BattlePage() {
   }, [timer]);
 
   const showEndModal = status === 'ended';
-  const endTitle = myHp > opponentHp ? 'You Win' : myHp < opponentHp ? 'You Lose' : 'Draw';
-  const endTone = myHp > opponentHp ? 'text-lime-200' : myHp < opponentHp ? 'text-rose-200' : 'text-cyan-100';
+  const effectiveWinner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
+  const endTitle = effectiveWinner === 'me' ? 'You Win' : effectiveWinner === 'opponent' ? 'You Lose' : 'Draw';
+  const endTone = effectiveWinner === 'me' ? 'text-lime-200' : effectiveWinner === 'opponent' ? 'text-rose-200' : 'text-cyan-100';
 
   const arenaPressure = Math.max(0, Math.min(100, Math.round((1 - timer / 90) * 100)));
 
@@ -459,7 +472,28 @@ export default function BattlePage() {
             Surrender
           </Button>
         </form>
-        {sending ? <p className="mt-2 text-xs text-white/60">Analyzing your message...</p> : null}
+        <AnimatePresence>
+          {sending ? (
+            <motion.div
+              key="sending-analysis"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: reducedMotion ? 0.1 : 0.24 }}
+              className="mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/8 px-3 py-1 text-xs tracking-[0.08em] text-cyan-100"
+            >
+              <span>Analyzing your message</span>
+              {[0, 1, 2].map((dot) => (
+                <motion.span
+                  key={dot}
+                  animate={{ opacity: reducedMotion ? 1 : [0.35, 1, 0.35], y: reducedMotion ? 0 : [0, -2, 0] }}
+                  transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.12, ease: 'easeInOut' }}
+                  className="h-1.5 w-1.5 rounded-full bg-cyan-200"
+                />
+              ))}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </Card>
 
       <PowerUpPanel cooldowns={cooldowns} onActivate={activatePower} />

@@ -147,12 +147,18 @@ Persistence note:
 
 ## 5. Leaderboard
 
-**Endpoint:** `GET /api/leaderboard?limit=100`
+**Endpoint:** `GET /api/leaderboard` (optional `?limit=100`)
+
+Notes:
+- Without `limit`, backend returns the full ranked list.
+- Leaderboard includes only real users plus the 5 swipe AI bots.
+- Other backend-only bot/system accounts are excluded.
+- Script/test accounts (for example `@test.com`) are excluded.
 
 Response (200):
 ```json
 [
-  { "rank": 1, "id": "u_17", "name": "VoltJester", "level": 22, "xp": 9120, "winRate": 72 }
+  { "rank": 1, "id": "u_17", "name": "VoltJester", "level": 22, "xp": 9120, "winRate": 72, "isAi": false }
 ]
 ```
 

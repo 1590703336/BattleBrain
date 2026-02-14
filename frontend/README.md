@@ -74,4 +74,4 @@ See [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) for the full system d
 | `VITE_BACKEND_URL` | `http://localhost:3000` | Backend Socket.IO server URL |
 | `VITE_APP_NAME` | `BattleBrain` | App display name |
 | `VITE_USE_MOCK_SOCKET` | `true` | Use frontend mock battle socket flow until backend socket is ready |
-| `VITE_USE_MOCK_API` | `true` | Use hardcoded records API data until backend records API is ready |
+| `VITE_USE_MOCK_API` | `false` | Set to `true` to use hardcoded records API data |

@@ -787,6 +787,16 @@ class MockBattleGateway {
     ];
   }
 
+  private generateMockTopic(opponentName: string) {
+    const subjects = ['group chat etiquette', 'office meme policy', 'late-night text strategy', 'playlist politics'];
+    const twists = ['is pure performance art', 'should be legally audited', 'is a social red flag', 'decides relationship survival'];
+    const constraints = ['in 2026', 'before coffee', 'under public pressure', 'after one viral post'];
+    const subject = subjects[Math.floor(Math.random() * subjects.length)];
+    const twist = twists[Math.floor(Math.random() * twists.length)];
+    const constraint = constraints[Math.floor(Math.random() * constraints.length)];
+    return `${opponentName} claims ${subject} ${twist} ${constraint}`;
+  }
+
   private clearQueueTimer() {
     if (this.queueTimer) {
       window.clearTimeout(this.queueTimer);
