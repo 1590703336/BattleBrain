@@ -255,6 +255,7 @@ Server should reject missing/invalid token with:
 - Identity/profile: `id`, `email`, `name/displayName`, `avatarUrl`
 - Progression: `level`, `xp`, badges
 - Aggregates: `wins`, `losses`, `draws`, totals, averages
+- Match history records: `records[]` (topic, opponent, stats, winner, timestamps)
 - Timestamps: `createdAt`, `updatedAt`, `lastActiveAt`
 
 ### Frontend temporary only
