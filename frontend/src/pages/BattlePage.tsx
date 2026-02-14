@@ -91,6 +91,8 @@ export default function BattlePage() {
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
   const [sending, setSending] = useState(false);
   const [waitingOpponent, setWaitingOpponent] = useState(false);
+  const [resultWinner, setResultWinner] = useState<'me' | 'opponent' | 'draw' | null>(null);
+  const [didRequestSurrender, setDidRequestSurrender] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -162,10 +164,13 @@ export default function BattlePage() {
     };
 
     const onEnd = (payload: BattleEndPayload) => {
+      const resolvedWinner = payload.reason === 'surrender' && didRequestSurrender ? 'opponent' : payload.winner;
       endBattle(payload);
-      saveCurrentResult({ winner: payload.winner });
+      saveCurrentResult({ winner: resolvedWinner });
+      setResultWinner(resolvedWinner);
       setSending(false);
       setWaitingOpponent(false);
+      setDidRequestSurrender(false);
       resetMatchQueue();
       socket.emit('leave-queue', {});
       socket.emit('get-cards', {});
@@ -202,6 +207,7 @@ export default function BattlePage() {
     buffs.meme,
     buffs.pun,
     buffs.dodge,
+    didRequestSurrender,
   ]);
 
   useEffect(() => {
@@ -241,16 +247,19 @@ export default function BattlePage() {
     }
     endSoundPlayedRef.current = true;
 
-    if (myHp > opponentHp) {
+    const winner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
+    if (winner === 'me') {
       playVictory();
     } else {
       playDefeat();
     }
-  }, [status, myHp, opponentHp, playVictory, playDefeat]);
+  }, [status, myHp, opponentHp, resultWinner, playVictory, playDefeat]);
 
   useEffect(() => {
     if (status === 'active') {
       endSoundPlayedRef.current = false;
+      setResultWinner(null);
+      setDidRequestSurrender(false);
     }
   }, [status]);
 
@@ -306,6 +315,7 @@ export default function BattlePage() {
 
     socket.emit('leave-queue', {});
     socket.emit('surrender-battle', { battleId });
+    setDidRequestSurrender(true);
     setToast('Surrender requested...');
   };
 
@@ -316,8 +326,9 @@ export default function BattlePage() {
   }, [timer]);
 
   const showEndModal = status === 'ended';
-  const endTitle = myHp > opponentHp ? 'You Win' : myHp < opponentHp ? 'You Lose' : 'Draw';
-  const endTone = myHp > opponentHp ? 'text-lime-200' : myHp < opponentHp ? 'text-rose-200' : 'text-cyan-100';
+  const effectiveWinner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
+  const endTitle = effectiveWinner === 'me' ? 'You Win' : effectiveWinner === 'opponent' ? 'You Lose' : 'Draw';
+  const endTone = effectiveWinner === 'me' ? 'text-lime-200' : effectiveWinner === 'opponent' ? 'text-rose-200' : 'text-cyan-100';
 
   const arenaPressure = Math.max(0, Math.min(100, Math.round((1 - timer / 90) * 100)));
 

@@ -293,6 +293,9 @@ class BattleService {
         }
 
         const opponentId = Object.keys(battle.players).find((id) => id !== userId) || null;
+        if (!opponentId) {
+            throw new Error('Opponent not found');
+        }
         this.endBattle(battleId, 'forfeit', opponentId);
         return true;
     }

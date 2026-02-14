@@ -1,7 +1,16 @@
 const OpenAI = require('openai');
 const config = require('../config/env');
 const logger = require('../utils/logger');
-const { TOPICS } = require('../config/constants');
+
+function generateTopicFallback(playerA = 'Player A', playerB = 'Player B') {
+    const arenas = ['group chat politics', 'office snack ethics', 'dating app strategy', 'meme reply etiquette'];
+    const claims = ['decides social status', 'should be banned immediately', 'is peak intelligence', 'reveals who is bluffing'];
+    const constraints = ['in 2026', 'under public voting', 'after midnight', 'during team standup'];
+    const arena = arenas[Math.floor(Math.random() * arenas.length)];
+    const claim = claims[Math.floor(Math.random() * claims.length)];
+    const constraint = constraints[Math.floor(Math.random() * constraints.length)];
+    return `${playerA} vs ${playerB}: ${arena} ${claim} ${constraint}`;
+}
 
 class AIService {
     constructor() {
@@ -156,7 +165,7 @@ Rules:
             return topic.slice(0, 120);
         } catch (err) {
             logger.warn({ err }, 'AI topic generation failed, using fallback');
-            return TOPICS[Math.floor(Math.random() * TOPICS.length)];
+            return generateTopicFallback(playerA, playerB);
         }
     }
 }

@@ -416,12 +416,6 @@ class MockBattleGateway {
     };
   } | null = null;
 
-  private readonly topics = [
-    'If your ex texted at 2AM, what is your opening line?',
-    'One sentence that instantly ruins a group chat vibe.',
-    'Pitch your worst startup idea with confidence.',
-  ];
-
   constructor(
     private readonly emitServerEvent: <K extends ServerEventName>(
       event: K,
@@ -535,7 +529,7 @@ class MockBattleGateway {
     const battleId = `b_${crypto.randomUUID().slice(0, 8)}`;
     const payload: BattleStartPayload = {
       battleId,
-      topic: this.topics[Math.floor(Math.random() * this.topics.length)],
+      topic: this.generateMockTopic(opponent.name),
       opponent,
       durationSec: 90,
     };
@@ -734,6 +728,16 @@ class MockBattleGateway {
       'That attempt had passion and absolutely no brakes.',
       'Strong opener. Weak warranty.',
     ];
+  }
+
+  private generateMockTopic(opponentName: string) {
+    const subjects = ['group chat etiquette', 'office meme policy', 'late-night text strategy', 'playlist politics'];
+    const twists = ['is pure performance art', 'should be legally audited', 'is a social red flag', 'decides relationship survival'];
+    const constraints = ['in 2026', 'before coffee', 'under public pressure', 'after one viral post'];
+    const subject = subjects[Math.floor(Math.random() * subjects.length)];
+    const twist = twists[Math.floor(Math.random() * twists.length)];
+    const constraint = constraints[Math.floor(Math.random() * constraints.length)];
+    return `${opponentName} claims ${subject} ${twist} ${constraint}`;
   }
 
   private clearQueueTimer() {
