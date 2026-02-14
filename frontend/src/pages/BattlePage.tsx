@@ -70,11 +70,12 @@ export default function BattlePage() {
     opponentHp,
     messages,
     timer,
-    setBattleMeta,
+    startBattle,
     addMessage,
     applyDamage,
     tick,
     stats,
+    saveCurrentResult,
   } = useBattleStore(
     useShallow((state) => ({
       topic: state.topic,
@@ -82,11 +83,12 @@ export default function BattlePage() {
       opponentHp: state.opponentHp,
       messages: state.messages,
       timer: state.timer,
-      setBattleMeta: state.setBattleMeta,
+      startBattle: state.startBattle,
       addMessage: state.addMessage,
       applyDamage: state.applyDamage,
       tick: state.tick,
       stats: state.stats,
+      saveCurrentResult: state.saveCurrentResult,
     }))
   );
 
@@ -94,6 +96,8 @@ export default function BattlePage() {
   const [damageBursts, setDamageBursts] = useState<DamageBurst[]>([]);
   const [toast, setToast] = useState('');
   const [lastSentAt, setLastSentAt] = useState(0);
+  const [endFlowStarted, setEndFlowStarted] = useState(false);
+  const [roundReady, setRoundReady] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -101,18 +105,38 @@ export default function BattlePage() {
   const { triggerStrike } = useStrikeAnimation(arenaRef, reducedMotion);
 
   useEffect(() => {
-    setBattleMeta(id, DEMO_TOPIC);
-  }, [id, setBattleMeta]);
+    setRoundReady(false);
+    startBattle(id, DEMO_TOPIC);
+    setEndFlowStarted(false);
+    const raf = requestAnimationFrame(() => setRoundReady(true));
+    return () => cancelAnimationFrame(raf);
+  }, [id, startBattle]);
+
+  const battleEnded = myHp === 0 || opponentHp === 0 || timer === 0;
 
   useEffect(() => {
-    if (timer === 0 || myHp === 0 || opponentHp === 0) {
-      const timeout = setTimeout(() => navigate('/result/demo'), 260);
-      return () => clearTimeout(timeout);
+    if (!roundReady) {
+      return;
+    }
+
+    if (battleEnded) {
+      if (endFlowStarted) {
+        return;
+      }
+      setEndFlowStarted(true);
+      saveCurrentResult({
+        battleId: id,
+        topic,
+        myHp,
+        opponentHp,
+        stats,
+      });
+      return;
     }
 
     const interval = setInterval(() => tick(), 1000);
     return () => clearInterval(interval);
-  }, [timer, myHp, opponentHp, tick, navigate]);
+  }, [battleEnded, endFlowStarted, tick, saveCurrentResult, roundReady, id, topic, myHp, opponentHp, stats]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -128,8 +152,6 @@ export default function BattlePage() {
     const timeout = setTimeout(() => setToast(''), 1400);
     return () => clearTimeout(timeout);
   }, [toast]);
-
-  const battleEnded = myHp === 0 || opponentHp === 0 || timer === 0;
 
   const timerLabel = useMemo(() => {
     const min = Math.floor(timer / 60);
@@ -216,6 +238,10 @@ export default function BattlePage() {
     }
   };
 
+  const endTitle = myHp > opponentHp ? 'You Win' : myHp < opponentHp ? 'You Lose' : 'Draw';
+  const endTone = myHp > opponentHp ? 'text-lime-200' : myHp < opponentHp ? 'text-rose-200' : 'text-cyan-100';
+  const showEndModal = battleEnded && endFlowStarted;
+
   return (
     <section className="space-y-4 md:space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -293,6 +319,35 @@ export default function BattlePage() {
       </Card>
 
       <Toast message={toast} visible={Boolean(toast)} />
+
+      <AnimatePresence>
+        {showEndModal ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[var(--z-overlay)] flex items-center justify-center bg-black/60 px-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: reducedMotion ? 0.1 : 0.22 }}
+              className="panel w-full max-w-md p-5 md:p-6"
+            >
+              <h2 className={`font-[var(--font-display)] text-3xl tracking-[0.08em] ${endTone}`}>{endTitle}</h2>
+              <p className="mt-2 text-sm text-white/70">Battle ended. Choose where to go next.</p>
+
+              <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Button variant="ghost" onClick={() => navigate('/')}>
+                  Back Homepage
+                </Button>
+                <Button onClick={() => navigate('/result/demo')}>Records</Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </section>
   );
 }

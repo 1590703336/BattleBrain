@@ -2,12 +2,21 @@ import { create } from 'zustand';
 import { BattleMessage } from '../types/socket';
 import { MAX_HP } from '../utils/constants';
 
-interface BattleStats {
+export interface BattleStats {
   myDamage: number;
   opponentDamage: number;
   messageCount: number;
   goodStrikes: number;
   toxicStrikes: number;
+}
+
+export interface BattleHistoryItem {
+  id: string;
+  battleId: string;
+  topic: string;
+  winner: 'me' | 'opponent' | 'draw';
+  stats: BattleStats;
+  finishedAt: number;
 }
 
 interface BattleState {
@@ -18,9 +27,19 @@ interface BattleState {
   messages: BattleMessage[];
   timer: number;
   stats: BattleStats;
+  history: BattleHistoryItem[];
+  resultSaved: boolean;
+  startBattle: (battleId: string, topic: string) => void;
   setBattleMeta: (battleId: string, topic: string) => void;
   addMessage: (message: BattleMessage) => void;
   applyDamage: (target: 'me' | 'opponent', amount: number, strikeType: BattleMessage['strikeType']) => void;
+  saveCurrentResult: (payload?: {
+    battleId?: string;
+    topic?: string;
+    myHp?: number;
+    opponentHp?: number;
+    stats?: BattleStats;
+  }) => void;
   tick: () => void;
   reset: () => void;
 }
@@ -41,6 +60,19 @@ export const useBattleStore = create<BattleState>((set) => ({
   messages: [],
   timer: 90,
   stats: initialStats(),
+  history: [],
+  resultSaved: false,
+  startBattle: (battleId, topic) =>
+    set({
+      battleId,
+      topic,
+      myHp: MAX_HP,
+      opponentHp: MAX_HP,
+      messages: [],
+      timer: 90,
+      stats: initialStats(),
+      resultSaved: false,
+    }),
   setBattleMeta: (battleId, topic) => set({ battleId, topic }),
   addMessage: (message) =>
     set((state) => ({
@@ -76,6 +108,39 @@ export const useBattleStore = create<BattleState>((set) => ({
 
       return next;
     }),
+  saveCurrentResult: (payload) =>
+    set((state) => {
+      if (state.resultSaved) {
+        return state;
+      }
+
+      const finalMyHp = payload?.myHp ?? state.myHp;
+      const finalOpponentHp = payload?.opponentHp ?? state.opponentHp;
+      const finalStats = payload?.stats ?? state.stats;
+      const finalBattleId = payload?.battleId ?? state.battleId;
+      const finalTopic = payload?.topic ?? state.topic;
+
+      let winner: 'me' | 'opponent' | 'draw' = 'draw';
+      if (finalMyHp > finalOpponentHp) {
+        winner = 'me';
+      } else if (finalMyHp < finalOpponentHp) {
+        winner = 'opponent';
+      }
+
+      const record: BattleHistoryItem = {
+        id: crypto.randomUUID(),
+        battleId: finalBattleId,
+        topic: finalTopic,
+        winner,
+        stats: { ...finalStats },
+        finishedAt: Date.now(),
+      };
+
+      return {
+        history: [record, ...state.history].slice(0, 10),
+        resultSaved: true,
+      };
+    }),
   tick: () => set((state) => ({ timer: Math.max(0, state.timer - 1) })),
   reset: () =>
     set({
@@ -86,5 +151,6 @@ export const useBattleStore = create<BattleState>((set) => ({
       messages: [],
       timer: 90,
       stats: initialStats(),
+      resultSaved: false,
     }),
 }));
