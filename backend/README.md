@@ -33,7 +33,7 @@ npm run dev
 
 ## Architecture
 
-See [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) for the full system design, file structure, and design decisions.
+See [backend/docs](./docs/README.md) for detailed API documentation by feature.
 
 ## Available Scripts
 
