@@ -3,7 +3,6 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import ChatMessage from '../components/battle/ChatMessage';
-import ComboMeter from '../components/battle/ComboMeter';
 import HealthBar from '../components/battle/HealthBar';
 import PowerUpPanel from '../components/battle/PowerUpPanel';
 import ThemeBackdrop from '../components/battle/ThemeBackdrop';
@@ -89,8 +88,6 @@ export default function BattlePage() {
   const [draft, setDraft] = useState('');
   const [damageBursts, setDamageBursts] = useState<DamageBurst[]>([]);
   const [toast, setToast] = useState('');
-  const [combo, setCombo] = useState(0);
-  const [maxCombo, setMaxCombo] = useState(0);
   const [cooldowns, setCooldowns] = useState<PowerState>({ meme: 0, pun: 0, dodge: 0 });
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
   const [sending, setSending] = useState(false);
@@ -130,20 +127,8 @@ export default function BattlePage() {
         setWaitingOpponent(false);
       }
 
-      if (message.role === 'me') {
-        if (message.strikeType === 'good') {
-          setCombo((current) => {
-            const next = current + (buffs.pun ? 2 : 1);
-            setMaxCombo((prev) => Math.max(prev, next));
-            return next;
-          });
-        } else {
-          setCombo(0);
-        }
-
-        if (buffs.meme || buffs.pun) {
-          setBuffs((current) => ({ ...current, meme: false, pun: false }));
-        }
+      if (message.role === 'me' && (buffs.meme || buffs.pun)) {
+        setBuffs((current) => ({ ...current, meme: false, pun: false }));
       }
 
       if (message.role === 'opponent' && buffs.dodge) {
@@ -287,7 +272,7 @@ export default function BattlePage() {
       setToast('Meme Attack primed: next line gets amplified.');
     }
     if (name === 'pun') {
-      setToast('Pun Attack primed: combo scaling increased.');
+      setToast('Pun Attack primed: next line gets extra impact.');
     }
     if (name === 'dodge') {
       setToast('Dodge primed: next incoming strike gets deflected.');
@@ -333,8 +318,6 @@ export default function BattlePage() {
   const effectiveWinner = resultWinner ?? (myHp > opponentHp ? 'me' : myHp < opponentHp ? 'opponent' : 'draw');
   const endTitle = effectiveWinner === 'me' ? 'You Win' : effectiveWinner === 'opponent' ? 'You Lose' : 'Draw';
   const endTone = effectiveWinner === 'me' ? 'text-lime-200' : effectiveWinner === 'opponent' ? 'text-rose-200' : 'text-cyan-100';
-
-  const arenaPressure = Math.max(0, Math.min(100, Math.round((1 - timer / 90) * 100)));
 
   return (
     <section
@@ -390,17 +373,6 @@ export default function BattlePage() {
           </div>
         )}
       </Card>
-
-      <div className="grid gap-3 md:grid-cols-[1.5fr_1fr]">
-        <ComboMeter combo={combo} />
-        <Card>
-          <div className="text-xs uppercase tracking-[0.08em] text-white/60">Arena Pressure</div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full bg-[linear-gradient(90deg,var(--color-neon-cyan),var(--color-neon-rose))]" style={{ width: `${arenaPressure}%` }} />
-          </div>
-          <div className="mt-2 text-sm text-white/75">Pacing indicator (time-based). Peak combo x{maxCombo}</div>
-        </Card>
-      </div>
 
       <Card className="relative overflow-hidden">
         <div ref={arenaRef} className="scanline relative rounded-2xl border border-white/12 p-3 md:p-4">

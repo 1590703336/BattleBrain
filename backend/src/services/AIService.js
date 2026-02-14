@@ -41,17 +41,82 @@ class AIService {
         return null;
     }
 
+    normalizeContent(content) {
+        if (typeof content === 'string') {
+            return content.trim();
+        }
+
+        if (content && typeof content === 'object' && !Array.isArray(content) && typeof content.text === 'string') {
+            return content.text.trim();
+        }
+
+        if (!Array.isArray(content)) {
+            return '';
+        }
+
+        const normalized = content
+            .map((part) => {
+                if (typeof part === 'string') {
+                    return part;
+                }
+
+                if (!part || typeof part !== 'object') {
+                    return '';
+                }
+
+                if (typeof part.text === 'string') {
+                    return part.text;
+                }
+
+                return '';
+            })
+            .join('\n')
+            .trim();
+
+        return normalized;
+    }
+
+    buildResponseDebugInfo(response) {
+        const choice = response?.choices?.[0];
+        const message = choice?.message || {};
+        const content = message.content;
+        const contentType = Array.isArray(content) ? 'array' : typeof content;
+        const normalized = this.normalizeContent(content);
+
+        return {
+            responseId: response?.id || null,
+            model: response?.model || null,
+            finishReason: choice?.finish_reason || null,
+            contentType,
+            contentParts: Array.isArray(content)
+                ? content.map((part) => {
+                    if (typeof part === 'string') return 'string';
+                    if (!part || typeof part !== 'object') return typeof part;
+                    return part.type || 'object';
+                })
+                : null,
+            contentLength: normalized.length,
+            hasToolCalls: Array.isArray(message.tool_calls) && message.tool_calls.length > 0,
+            refusal: typeof message.refusal === 'string' ? message.refusal.slice(0, 200) : null,
+            usage: response?.usage || null
+        };
+    }
+
     /**
      * Retry wrapper — retries API call up to maxRetries times on empty responses.
      */
-    async callWithRetry(apiCallFn, maxRetries = 2) {
+    async callWithRetry(apiCallFn, maxRetries = 2, context = {}) {
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
             const response = await apiCallFn();
-            const content = response.choices?.[0]?.message?.content;
-            if (content && content.trim()) return content.trim();
+            const content = this.normalizeContent(response?.choices?.[0]?.message?.content);
+            if (content) return content;
+
+            const debugInfo = this.buildResponseDebugInfo(response);
             if (attempt < maxRetries) {
-                logger.warn({ attempt: attempt + 1 }, 'Empty AI response, retrying...');
+                logger.warn({ attempt: attempt + 1, ...context, ...debugInfo }, 'Empty AI response, retrying...');
                 await new Promise(r => setTimeout(r, 2000));
+            } else {
+                logger.warn({ ...context, ...debugInfo }, 'Empty AI response after retries');
             }
         }
         return null;
@@ -73,7 +138,8 @@ Current Message to Judge:
 Respond with JSON scores.
 `;
 
-            const content = await this.callWithRetry(() =>
+            const content = await this.callWithRetry(
+                () =>
                 this.client.chat.completions.create({
                     model: this.model,
                     messages: [
@@ -94,8 +160,10 @@ Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
                         { role: 'user', content: finalPrompt }
                     ],
                     temperature: 0.3,
-                    max_tokens: 100
-                })
+                    max_tokens: 1000
+                }),
+                2,
+                { operation: 'analyzeMessage' }
             );
 
             if (!content) {
@@ -181,7 +249,8 @@ ${antiRepeatBlock}
 
 Respond with ONLY your debate reply as plain text. No JSON, no quotes, no labels. Just your reply.`;
 
-            const content = await this.callWithRetry(() =>
+            const content = await this.callWithRetry(
+                () =>
                 this.client.chat.completions.create({
                     model: this.model,
                     messages: [
@@ -197,8 +266,10 @@ Respond with ONLY your debate reply as plain text. No JSON, no quotes, no labels
                     ],
                     temperature: 1.0,
                     top_p: 0.92,
-                    max_tokens: 200
-                })
+                    max_tokens: 1000
+                }),
+                2,
+                { operation: 'generateBotReply', botName }
             );
 
             if (!content) {
