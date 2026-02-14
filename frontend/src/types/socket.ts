@@ -51,6 +51,8 @@ export interface BattleStartPayload {
   topic: string;
   opponent: BattleOpponent;
   durationSec: number;
+  myRole?: string;
+  opponentRole?: string;
 }
 
 export interface BattleMessagePayload {

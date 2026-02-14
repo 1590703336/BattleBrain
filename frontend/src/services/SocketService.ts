@@ -64,11 +64,11 @@ class SocketService {
 
   private activeBattleMeta:
     | {
-        battleId: string;
-        myId: string;
-        durationSec: number;
-        startedAt: number;
-      }
+      battleId: string;
+      myId: string;
+      durationSec: number;
+      startedAt: number;
+    }
     | null = null;
 
   connect() {
@@ -198,7 +198,7 @@ class SocketService {
         level: Math.max(1, Number(source.level || 1)),
       };
     } else if (raw.players && typeof raw.players === 'object') {
-      const players = raw.players as Record<string, { user?: Record<string, unknown> }>;
+      const players = raw.players as Record<string, { user?: Record<string, unknown>; role?: string }>;
       const ids = Object.keys(players);
       const opponentId = ids.find((id) => id !== myId) || ids[0] || '';
       const opponentUser = players[opponentId]?.user || {};
@@ -220,11 +220,21 @@ class SocketService {
       startedAt: Number(raw.startTime) > 0 ? Number(raw.startTime) : Date.now(),
     };
 
+    let myRole = '';
+    let opponentRole = '';
+    if (raw.players && typeof raw.players === 'object') {
+      const p = raw.players as Record<string, { role?: string }>;
+      myRole = String(p[myId]?.role || '');
+      opponentRole = String(p[opponent.id]?.role || '');
+    }
+
     return {
       battleId,
       topic: String(raw.topic || 'Unknown Topic'),
       opponent,
       durationSec,
+      myRole,
+      opponentRole,
     };
   }
 
@@ -416,12 +426,55 @@ class MockBattleGateway {
     };
   } | null = null;
 
+  private readonly topics = [
+    {
+      topic: 'Pineapple belongs on pizza',
+      roles: ['Pineapple BELONGS on pizza', 'It violates Italian tradition'],
+    },
+    {
+      topic: 'Cats are better pets than dogs',
+      roles: ['Cats are cleaner & smarter', 'Dogs are loyal & fun'],
+    },
+    {
+      topic: 'A hot dog is a sandwich',
+      roles: ['It IS a sandwich', 'It is NOT a sandwich'],
+    },
+    {
+      topic: 'Summer is the best season',
+      roles: ['Summer is freedom & sun', 'Winter is cozy & cool'],
+    },
+    {
+      topic: 'Video games should be an Olympic sport',
+      roles: ['Yes, strategy is a sport', 'No, sports need athletics'],
+    },
+    {
+      topic: 'Cereal is a soup',
+      roles: ['Technically, it is soup', 'No, keep soup hot'],
+    },
+    {
+      topic: 'Movies are always worse than the books',
+      roles: ['Books have more depth', 'Movies do it better'],
+    },
+    {
+      topic: 'Remote work is superior to office work',
+      roles: ['Home is productive', 'Office culture matters'],
+    },
+    {
+      topic: 'Social media does more harm than good',
+      roles: ['It destroys mental health', 'It connects the world'],
+    },
+    {
+      topic: 'Water is just boneless ice',
+      roles: ['Yes, scientifically true', 'No, that makes no sense'],
+    },
+  ];
+
   constructor(
     private readonly emitServerEvent: <K extends ServerEventName>(
       event: K,
       payload: Parameters<ServerToClientEvents[K]>[0]
     ) => void
-  ) {}
+  ) { }
 
   handleClientEvent<K extends keyof ClientToServerEvents>(
     event: K,
@@ -527,16 +580,20 @@ class MockBattleGateway {
 
   private startBattleWithOpponent(opponent: { id: string; name: string; level: number }) {
     const battleId = `b_${crypto.randomUUID().slice(0, 8)}`;
+    const selection = this.topics[Math.floor(Math.random() * this.topics.length)];
+
     const payload: BattleStartPayload = {
       battleId,
-      topic: this.generateMockTopic(opponent.name),
+      topic: selection.topic,
       opponent,
       durationSec: 90,
+      myRole: selection.roles[0],
+      opponentRole: selection.roles[1],
     };
 
     this.battle = {
       battleId,
-      topic: payload.topic,
+      topic: selection.topic,
       myHp: 100,
       opponentHp: 100,
       timer: 90,
