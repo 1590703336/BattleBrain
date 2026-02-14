@@ -1,6 +1,6 @@
 # BattleBrain Frontend
 
-React SPA powering the Meme Battle Arena UI — swipe-to-match, real-time debate arena, animated HP bars, and AI scoring display.
+React SPA powering the Battle Arena demo UI — landing, real-time battle arena, and result screen with layered animation.
 
 ## Tech Stack
 
@@ -14,7 +14,7 @@ React SPA powering the Meme Battle Arena UI — swipe-to-match, real-time debate
 | Routing | React Router v7 |
 | Real-Time | Socket.IO Client |
 | Audio | Howler.js (optional) |
-| Fonts | Inter, Outfit (Google Fonts) |
+| Fonts | Orbitron, Manrope (Google Fonts) |
 
 ## Quick Start
 
@@ -31,6 +31,27 @@ npm run dev        # → http://localhost:5173
 ## Architecture
 
 See [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) for the full system design, component hierarchy, animation system, and design decisions.
+
+## Implemented in this iteration
+
+- `Landing` page with animated hero, CTA, and topic cards.
+- `Battle` page with:
+  - HP bars
+  - live message list
+  - timer
+  - strike effects (Framer Motion + GSAP)
+  - stress test trigger (`10x Stress`)
+- `Result` page with winner state and battle stats.
+- Design tokens and motion tokens:
+  - `src/styles/tokens.css`
+  - `src/utils/motion.ts`
+- Socket event types:
+  - `src/types/socket.ts`
+
+## Additional docs
+
+- Visual baseline: [DESIGN_BASELINE.md](./DESIGN_BASELINE.md)
+- QA checklist: [QA_CHECKLIST.md](./QA_CHECKLIST.md)
 
 ## Available Scripts
 

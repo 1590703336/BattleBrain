@@ -387,8 +387,8 @@ sequenceDiagram
   --color-toxic-strike: #f43f5e;
 
   /* Typography */
-  --font-display: 'Outfit', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  --font-display: 'Orbitron', sans-serif;
+  --font-body: 'Manrope', sans-serif;
 
   /* Glassmorphism */
   --glass-bg: rgba(255, 255, 255, 0.06);
@@ -405,7 +405,7 @@ sequenceDiagram
 | **Glassmorphism** | Cards use `backdrop-filter: blur(12px)` + semi-transparent backgrounds |
 | **Neon glow** | `box-shadow` and `text-shadow` with cyan/magenta accent colors |
 | **Gradients** | Background gradients from purple-900 → gray-900 → cyan-900 |
-| **Typography** | Outfit for headings (bold, modern), Inter for body text (clean, readable) |
+| **Typography** | Orbitron for headings (arcade/esports), Manrope for body text (clear, dense UI) |
 
 ---
 
@@ -437,7 +437,7 @@ sequenceDiagram
 | State | Zustand | 5+ |
 | Real-Time | Socket.IO Client | 4.8+ |
 | Audio (optional) | Howler.js | 2.2+ |
-| Fonts | Google Fonts (Inter, Outfit) | — |
+| Fonts | Google Fonts (Orbitron, Manrope) | — |
 
 ---
 
