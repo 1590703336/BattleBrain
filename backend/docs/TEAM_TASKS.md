@@ -56,7 +56,7 @@ To parallelize development, the remaining backend work is divided into two track
 - **File:** `src/controllers/UserController.js` (or `BattleController`)
 - **Endpoints:**
   - `GET /api/users/:id/battles` — Get paginated battle history.
-  - Since battles are embedded in User, this queries the `battles` array.
+  - Since records are embedded in User, this queries the `records` array.
 
 ### 3. Leaderboard System
 - **File:** `src/controllers/LeaderboardController.js`
