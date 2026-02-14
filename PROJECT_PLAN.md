@@ -13,6 +13,7 @@ Phased development roadmap with separate backend and frontend milestones.
 | # | Task | Details |
 |---|------|---------|
 | 1 | **Project setup** | Node.js + Express + Socket.IO scaffold, ESLint, pino logging, env validation |
+| 1b | **JWT Authentication** | `POST /api/auth/signup` + `POST /api/auth/login` — bcrypt password hashing, JWT token generation/verification, `authMiddleware` for Socket.IO + HTTP |
 | 2 | **MongoDB integration** | Mongoose models for `User`, `Battle`, `Message`; connection pooling; indexes |
 | 3 | **Matchmaking service** | Player queue, auto-pair when 2 waiting, bot fallback after 10s timeout |
 | 4 | **AI message analysis** | GPT-oss 120b integration via OpenAI SDK; `analyze(message, topic)` → `{ wit, relevance, toxicity, damage, strikeType }`; JSON response format; keyword-based fallback |
@@ -78,8 +79,8 @@ Phased development roadmap with separate backend and frontend milestones.
 
 | # | Task | Details |
 |---|------|---------|
-| 1 | **Authentication** | Firebase Auth or Supabase — email/password, Google OAuth, guest-to-account upgrade |
-| 2 | **Persistent profiles** | Link auth identity to MongoDB user document; session management |
+| 1 | **Google OAuth** | Add Google OAuth as alternative login method alongside existing JWT email/password |
+| 2 | **Guest-to-account upgrade** | Allow guest users to play, then link guest session to a real account; session management |
 | 3 | **Advanced AI moderation** | Fine-tune GPT-oss 120b prompts for edge cases; persistent offense tracking; escalating penalties |
 | 4 | **Reporting system** | `POST /api/reports` — flag users/messages; admin review queue |
 | 5 | **Anonymous mode** | Optional — hide display name, use generated handle |
@@ -89,7 +90,7 @@ Phased development roadmap with separate backend and frontend milestones.
 
 | # | Task | Details |
 |---|------|---------|
-| 1 | **Auth flow** | Login/signup modals, Google OAuth button, guest mode |
+| 1 | **OAuth flow** | Google OAuth button, guest-to-account upgrade modal |
 | 2 | **Settings page** | Toggle anonymous mode, notification preferences, account management |
 | 3 | **Report UI** | Flag button on messages, report confirmation modal |
 | 4 | **Share flow** | "Share Epic Roast" button → generates image/link for social media |

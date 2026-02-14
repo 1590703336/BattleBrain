@@ -9,8 +9,9 @@ AI-moderated real-time debate arena — the backend server powering Meme Battle 
 | Runtime | Node.js |
 | HTTP Framework | Express |
 | WebSockets | Socket.IO |
-| AI Model | GPT-oss 120b (evaluate wit, relevance & toxicity) |
-| Database | MongoDB (users, battles, stats, XP) |
+| AI Model | GPT-oss 120b via OpenRouter (evaluate wit, relevance & toxicity) |
+| Database | MongoDB via Mongoose (users, battles, stats, XP) |
+| Auth | JWT (jsonwebtoken) + bcrypt |
 | Logging | pino + pino-pretty |
 | Concurrency | async-mutex |
 | Linting | ESLint |
@@ -24,7 +25,7 @@ npm install
 
 # 2. Set up environment
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY + MONGODB_URI
+# Edit .env and add your OPENROUTER_API_KEY, MONGODB_URI, and JWT_SECRET
 
 # 3. Start dev server
 npm run dev
@@ -48,6 +49,8 @@ See [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) for the full system des
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `POST` | `/api/auth/signup` | Create account — returns JWT token + user |
+| `POST` | `/api/auth/login` | Log in — returns JWT token + user |
 | `GET` | `/health` | Health check — returns `{ status, uptime, timestamp }` |
 
 ### Socket.IO Events
