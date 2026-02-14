@@ -2,7 +2,7 @@
 
 ## Overview
 
-BattleBrain is a gamified AI-moderated debate platform where players engage in real-time "meme battles." The backend is a **Node.js + Express + Socket.IO** server that manages matchmaking, real-time battle state, and AI-powered message analysis via OpenAI.
+BattleBrain is a gamified AI-moderated debate platform where players engage in real-time "meme battles." The backend is a **Node.js + Express + Socket.IO** server that manages matchmaking, real-time battle state, AI-powered message analysis via GPT-oss 120b, and persistent data storage with **MongoDB**.
 
 This document describes the industry-standard layered architecture used for the backend.
 
@@ -39,6 +39,10 @@ graph TB
         BOT_SVC[BotService]
     end
 
+    subgraph "Data Layer"
+        MONGO[(MongoDB)]
+    end
+
     subgraph "Config"
         ENV[env.js — validated env vars]
         CONST[constants.js — game tuning]
@@ -59,7 +63,9 @@ graph TB
     BATTLE_H --> BATTLE_SVC
     QUEUE_H --> MATCH_SVC
     BATTLE_SVC --> AI_SVC
+    BATTLE_SVC --> MONGO
     MATCH_SVC --> BOT_SVC
+    MATCH_SVC --> MONGO
     AI_SVC --> ENV
     BATTLE_SVC --> CONST
     BATTLE_SVC --> LOGGER
@@ -100,7 +106,7 @@ backend/
 ├── .eslintrc.json                # ESLint config
 ├── package.json                  # Dependencies and scripts
 ├── nodemon.json                  # Dev server config (watches src/)
-├── ARCHITECTURE.md               # This file
+├── BACKEND_ARCHITECTURE.md       # This file
 └── README.md                     # Setup & usage instructions
 ```
 
@@ -121,7 +127,7 @@ This is where **all business logic** lives. Services are class-based for encapsu
 
 | Service | Responsibility |
 |---------|---------------|
-| **AIService** | Wraps OpenAI API. Uses `gpt-4o-mini` with `response_format: { type: "json_object" }` for guaranteed JSON. Includes try/catch with automatic fallback to keyword-based analysis. Exposes `analyze(message, topic)` → `{ wit, relevance, toxicity, damage, strikeType }`. |
+| **AIService** | Wraps OpenAI API. Uses `gpt-oss-120b` with `response_format: { type: "json_object" }` for guaranteed JSON. Includes try/catch with automatic fallback to keyword-based analysis. Exposes `analyze(message, topic)` → `{ wit, relevance, toxicity, damage, strikeType }`. |
 | **BattleService** | State machine per battle. Each `Battle` instance manages HP, messages, and timers. Uses **async-mutex** on `processMessage()` to prevent race conditions from concurrent AI calls updating HP simultaneously. Has an `ended` guard flag so `endBattle()` can't fire twice (timer + HP=0 race). Emits domain events rather than touching Socket.IO directly. |
 | **MatchmakingService** | Manages the player queue. Pairs players when 2 are waiting. Starts a **bot fallback timer** — if a player waits > 10s, auto-matches them with a BotService opponent. Cleans up queue entries on disconnect. |
 | **BotService** | Simulates an opponent for solo play / demos. Sends random witty messages on a 5–10s interval. Can be toggled via `ENABLE_BOT` env var. |
@@ -173,7 +179,7 @@ This is where **all business logic** lives. Services are class-based for encapsu
 | **Structured logging (pino)** | JSON logs are grep-able and parseable by log aggregators (Datadog, etc.) |
 | **Bot fallback** | Demo never breaks even with 0 other users online |
 | **`response_format: json_object`** | Eliminates fragile `JSON.parse` on LLM free-text output |
-| **`gpt-4o-mini` over `gpt-4`** | ~10x faster response time, ~20x cheaper, sufficient quality for scoring |
+| **`gpt-oss-120b`** | Open-source 120B parameter model — strong enough for wit/toxicity scoring, cost-effective, self-hostable |
 
 ---
 
@@ -184,7 +190,8 @@ This is where **all business logic** lives. Services are class-based for encapsu
 | Runtime | Node.js |
 | HTTP Framework | Express |
 | WebSockets | Socket.IO |
-| AI | OpenAI SDK (`gpt-4o-mini`) |
+| AI | OpenAI SDK (`gpt-oss-120b`) |
+| Database | MongoDB (Mongoose ODM) |
 | Logging | pino + pino-pretty |
 | Concurrency | async-mutex |
 | Linting | ESLint |
@@ -198,7 +205,8 @@ This is where **all business logic** lives. Services are class-based for encapsu
 |----------|----------|---------|-------------|
 | `PORT` | No | `3000` | Server port |
 | `NODE_ENV` | No | `development` | Environment mode |
-| `OPENAI_API_KEY` | **Yes** | — | OpenAI API key |
+| `OPENAI_API_KEY` | **Yes** | — | OpenAI-compatible API key (for GPT-oss 120b) |
+| `MONGODB_URI` | **Yes** | — | MongoDB connection string |
 | `FRONTEND_URL` | No | `http://localhost:5173` | Allowed CORS origin |
 | `LOG_LEVEL` | No | `debug` | Logging verbosity |
 | `ENABLE_BOT` | No | `true` | Enable bot opponent fallback |

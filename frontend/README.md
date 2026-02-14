@@ -1,0 +1,48 @@
+# BattleBrain Frontend
+
+React SPA powering the Meme Battle Arena UI — swipe-to-match, real-time debate arena, animated HP bars, and AI scoring display.
+
+## Tech Stack
+
+| Category | Technology |
+|----------|-----------|
+| Framework | React 19 (Vite 6) |
+| Styling | TailwindCSS v4 |
+| UI Animations | Framer Motion |
+| Game Animations | GSAP (GreenSock) |
+| State | Zustand |
+| Routing | React Router v7 |
+| Real-Time | Socket.IO Client |
+| Audio | Howler.js (optional) |
+| Fonts | Inter, Outfit (Google Fonts) |
+
+## Quick Start
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start dev server
+npm run dev        # → http://localhost:5173
+```
+
+> **Note**: The backend must be running at `http://localhost:3000` (or set `VITE_BACKEND_URL` in `.env`).
+
+## Architecture
+
+See [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) for the full system design, component hierarchy, animation system, and design decisions.
+
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server with HMR |
+| `npm run build` | Build production bundle |
+| `npm run preview` | Preview production build locally |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_BACKEND_URL` | `http://localhost:3000` | Backend Socket.IO server URL |
+| `VITE_APP_NAME` | `BattleBrain` | App display name |

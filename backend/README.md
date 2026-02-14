@@ -4,11 +4,17 @@ AI-moderated real-time debate arena — the backend server powering Meme Battle 
 
 ## Tech Stack
 
-- **Node.js + Express** — HTTP server
-- **Socket.IO** — real-time WebSocket communication
-- **OpenAI (gpt-4o-mini)** — AI message analysis (wit, relevance, toxicity)
-- **pino** — structured logging
-- **async-mutex** — concurrency-safe battle state
+| Category | Technology |
+|----------|-----------|
+| Runtime | Node.js |
+| HTTP Framework | Express |
+| WebSockets | Socket.IO |
+| AI Model | GPT-oss 120b (evaluate wit, relevance & toxicity) |
+| Database | MongoDB (users, battles, stats, XP) |
+| Logging | pino + pino-pretty |
+| Concurrency | async-mutex |
+| Linting | ESLint |
+| Dev Server | nodemon |
 
 ## Quick Start
 
@@ -18,7 +24,7 @@ npm install
 
 # 2. Set up environment
 cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
+# Edit .env and add your OPENAI_API_KEY + MONGODB_URI
 
 # 3. Start dev server
 npm run dev
@@ -26,7 +32,7 @@ npm run dev
 
 ## Architecture
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system design, file structure, and design decisions.
+See [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) for the full system design, file structure, and design decisions.
 
 ## Available Scripts
 
@@ -42,16 +48,23 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for the full system design, file struct
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Health check — returns `{ status, uptime, timestamp }` |
 
 ### Socket.IO Events
 
-| Direction | Event | Description |
-|-----------|-------|-------------|
-| Client → Server | `join-queue` | Enter matchmaking queue |
-| Client → Server | `send-message` | Send debate message |
-| Server → Client | `waiting` | In queue, waiting for opponent |
-| Server → Client | `battle-start` | Battle matched |
-| Server → Client | `battle-message` | Message analyzed, HP updated |
-| Server → Client | `battle-end` | Battle over |
-| Server → Client | `rate-limited` | Message rejected (cooldown) |
+#### Client → Server
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `join-queue` | — | Enter the matchmaking queue |
+| `send-message` | `string` (message text) | Send a debate message during battle |
+
+#### Server → Client
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `waiting` | — | Player is in queue, waiting for opponent |
+| `battle-start` | `{ battleId, topic, opponent }` | Battle matched, topic assigned |
+| `battle-message` | `{ senderId, message, analysis, state }` | Message analyzed, HP updated |
+| `battle-end` | `{ winner, finalState }` | Battle is over |
+| `rate-limited` | `{ cooldownRemaining }` | Message rejected (too fast) |
