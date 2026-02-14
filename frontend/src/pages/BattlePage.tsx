@@ -445,7 +445,28 @@ export default function BattlePage() {
             Surrender
           </Button>
         </form>
-        {sending ? <p className="mt-2 text-xs text-white/60">Analyzing your message...</p> : null}
+        <AnimatePresence>
+          {sending ? (
+            <motion.div
+              key="sending-analysis"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: reducedMotion ? 0.1 : 0.24 }}
+              className="mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/8 px-3 py-1 text-xs tracking-[0.08em] text-cyan-100"
+            >
+              <span>Analyzing your message</span>
+              {[0, 1, 2].map((dot) => (
+                <motion.span
+                  key={dot}
+                  animate={{ opacity: reducedMotion ? 1 : [0.35, 1, 0.35], y: reducedMotion ? 0 : [0, -2, 0] }}
+                  transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.12, ease: 'easeInOut' }}
+                  className="h-1.5 w-1.5 rounded-full bg-cyan-200"
+                />
+              ))}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </Card>
 
       <PowerUpPanel cooldowns={cooldowns} onActivate={activatePower} />
