@@ -44,7 +44,8 @@ export default function BattlePage() {
   const navigate = useNavigate();
   const socket = useSocket(true);
   const reducedMotion = useReducedMotionPreference();
-  const { playStrike, playVictory, playDefeat, playUiTap } = useSoundEffect(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const { playStrike, playVictory, playDefeat, playUiTap, unlockAudio, unlocked } = useSoundEffect(soundEnabled);
 
   const {
     status,
@@ -233,6 +234,7 @@ export default function BattlePage() {
       return;
     }
 
+    void unlockAudio();
     playUiTap();
     setCooldowns((state) => ({ ...state, [name]: cooldownPreset[name] }));
     setBuffs((state) => ({ ...state, [name]: true }));
@@ -254,6 +256,7 @@ export default function BattlePage() {
       return;
     }
 
+    void unlockAudio();
     const decorated = `${buffs.meme ? '[Meme x2] ' : ''}${draft.trim()}`;
 
     socket.emit('send-message', {
@@ -276,7 +279,12 @@ export default function BattlePage() {
   const arenaPressure = Math.max(0, Math.min(100, Math.round((1 - timer / 90) * 100)));
 
   return (
-    <section className="space-y-4 md:space-y-6">
+    <section
+      className="space-y-4 md:space-y-6"
+      onPointerDownCapture={() => {
+        void unlockAudio();
+      }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[var(--font-display)] text-2xl tracking-[0.08em] md:text-3xl">Battle Arena</h1>
@@ -287,6 +295,21 @@ export default function BattlePage() {
         <div className="flex items-center gap-2">
           <Badge text={`Timer ${timerLabel}`} tone={timer <= 15 ? 'rose' : 'cyan'} />
           <Badge text={status === 'ended' ? 'Ended' : 'Live'} tone={status === 'ended' ? 'rose' : 'lime'} />
+          <button
+            type="button"
+            onClick={() => {
+              setSoundEnabled((prev) => {
+                const next = !prev;
+                if (next) {
+                  void unlockAudio();
+                }
+                return next;
+              });
+            }}
+            className="rounded-full border border-white/20 bg-black/25 px-3 py-1 text-xs text-white/80 transition hover:bg-white/10"
+          >
+            {soundEnabled ? (unlocked ? 'SFX On' : 'SFX Tap To Enable') : 'SFX Off'}
+          </button>
         </div>
       </div>
 
@@ -304,7 +327,7 @@ export default function BattlePage() {
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
             <div className="h-full bg-[linear-gradient(90deg,var(--color-neon-cyan),var(--color-neon-rose))]" style={{ width: `${arenaPressure}%` }} />
           </div>
-          <div className="mt-2 text-sm text-white/75">Peak combo x{maxCombo}</div>
+          <div className="mt-2 text-sm text-white/75">Pacing indicator (time-based). Peak combo x{maxCombo}</div>
         </Card>
       </div>
 

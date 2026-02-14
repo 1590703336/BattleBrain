@@ -36,6 +36,7 @@ export default function ThemeBackdrop({ topic }: ThemeBackdropProps) {
         <span>Arena Theme</span>
         <span>{theme.name}</span>
       </div>
+      <p className="relative z-10 mt-1 text-xs text-white/60">Visual mood layer by topic category (no gameplay bonus).</p>
       <div className="pointer-events-none absolute inset-0">
         {[...Array(8)].map((_, idx) => (
           <motion.span
