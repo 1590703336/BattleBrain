@@ -42,31 +42,26 @@ function toKeywordFragment(text) {
 
 function buildFlexibleFallback(topic, lastMessage) {
     const fragment = toKeywordFragment(lastMessage);
-    const attackOpeners = [
-        `On "${topic}", your take folds under one question.`,
-        `For "${topic}", that argument has volume but no spine.`,
-        `"${topic}" is not the place for half-built logic like that.`,
-        `On "${topic}", you just handed me free damage.`
+    const hasContent = fragment && fragment !== 'that take';
+
+    // Dynamic attack patterns that reference the actual argument
+    const patterns = [
+        () => hasContent
+            ? `You said "${fragment}" like it proves something about ${topic}. It does not. Try harder.`
+            : `Silence on ${topic}? That is not defense, that is surrender with extra steps.`,
+        () => hasContent
+            ? `"${fragment}" is doing a lot of heavy lifting in your ${topic} argument, and it is buckling.`
+            : `No real point on ${topic} yet. The clock is ticking and your HP is not.`,
+        () => hasContent
+            ? `Interesting how "${fragment}" is your best shot on ${topic}. Watch what an actual argument looks like.`
+            : `You are debating ${topic} with the intensity of a loading screen. Wake up.`,
+        () => hasContent
+            ? `"${fragment}" sounds clever until you realize it has nothing to do with winning on ${topic}.`
+            : `Still waiting for your first real move on ${topic}. That was not it.`
     ];
 
-    const attackMiddles = [
-        `You leaned on "${fragment}", but that is a weak pillar.`,
-        `That "${fragment}" angle collapses the second it is tested.`,
-        `You pushed "${fragment}", but it cannot carry the claim.`,
-        `Your "${fragment}" point sounds bold and proves nothing.`
-    ];
-
-    const attackClosers = [
-        'Come back with an argument, not just noise.',
-        'Try evidence next turn, not confidence cosplay.',
-        'You are shadowboxing while the topic scores you down.',
-        'That line is style without structure.'
-    ];
-
-    const opener = attackOpeners[Math.floor(Math.random() * attackOpeners.length)];
-    const middle = attackMiddles[Math.floor(Math.random() * attackMiddles.length)];
-    const closer = attackClosers[Math.floor(Math.random() * attackClosers.length)];
-    return `${opener} ${middle} ${closer}`.slice(0, 260);
+    const pick = patterns[Math.floor(Math.random() * patterns.length)];
+    return pick().slice(0, 260);
 }
 
 function createDefaultStats() {
@@ -91,22 +86,36 @@ class BattleService {
         this.activeBattles = new Map();
     }
 
-    createBattle(player1, player2, topic) {
+    createBattle(player1, player2, topicData) {
         const battleId = `battle_${Date.now()}_${randomUUID().slice(0, 8)}`;
 
         const normalizedPlayer1 = this.normalizePlayer(player1);
         const normalizedPlayer2 = this.normalizePlayer(player2);
 
+        // Handle both string (legacy/fallback) and object (new hardcoded) topic formats
+        const topicText = typeof topicData === 'string' ? topicData : (topicData.topic || 'Random Debate');
+        const roles = topicData.roles || { player1Role: 'Debater 1', player2Role: 'Debater 2' };
+
         logger.info({ battleId, p1: normalizedPlayer1.displayName, p2: normalizedPlayer2.displayName }, 'Creating battle');
 
         const state = {
             id: battleId,
-            topic,
+            topic: topicText,
             startTime: Date.now(),
             durationMs: BATTLE_DURATION_MS,
             players: {
-                [normalizedPlayer1.id]: { hp: INITIAL_HP, user: normalizedPlayer1, messagesCount: 0 },
-                [normalizedPlayer2.id]: { hp: INITIAL_HP, user: normalizedPlayer2, messagesCount: 0 }
+                [normalizedPlayer1.id]: {
+                    hp: INITIAL_HP,
+                    user: normalizedPlayer1,
+                    messagesCount: 0,
+                    role: roles.player1Role
+                },
+                [normalizedPlayer2.id]: {
+                    hp: INITIAL_HP,
+                    user: normalizedPlayer2,
+                    messagesCount: 0,
+                    role: roles.player2Role
+                }
             },
             messages: [],
             timerId: setTimeout(() => this.endBattle(battleId, 'timeout'), BATTLE_DURATION_MS)
@@ -117,13 +126,23 @@ class BattleService {
         return {
             id: battleId,
             battleId,
-            topic,
+            topic: topicText,
             startTime: state.startTime,
             duration: state.durationMs,
             durationSec: Math.max(1, Math.round(state.durationMs / 1000)),
             players: {
-                [normalizedPlayer1.id]: { hp: INITIAL_HP, user: normalizedPlayer1, messagesCount: 0 },
-                [normalizedPlayer2.id]: { hp: INITIAL_HP, user: normalizedPlayer2, messagesCount: 0 }
+                [normalizedPlayer1.id]: {
+                    hp: INITIAL_HP,
+                    user: normalizedPlayer1,
+                    messagesCount: 0,
+                    role: roles.player1Role
+                },
+                [normalizedPlayer2.id]: {
+                    hp: INITIAL_HP,
+                    user: normalizedPlayer2,
+                    messagesCount: 0,
+                    role: roles.player2Role
+                }
             }
         };
     }
@@ -186,6 +205,12 @@ class BattleService {
         if (analysis.toxicity >= TOXIC_STRIKE_THRESHOLD) {
             strikeType = 'toxic';
             damage = Math.min(INITIAL_HP, Math.max(0, Math.round(clampScore(analysis.toxicity) * 0.2)));
+            damageTarget = 'me';
+            battle.players[senderId].hp = Math.max(0, battle.players[senderId].hp - damage);
+        } else if (analysis.relevance <= 15) {
+            // New: Penalize completely off-topic messages
+            strikeType = 'toxic'; // Or 'off-topic' if frontend supports it, but reusing 'toxic' ensures red visual
+            damage = 10; // Flat penalty for being off-topic
             damageTarget = 'me';
             battle.players[senderId].hp = Math.max(0, battle.players[senderId].hp - damage);
         } else if (analysis.wit >= GOOD_STRIKE_THRESHOLD && analysis.relevance >= GOOD_STRIKE_THRESHOLD) {
@@ -353,6 +378,12 @@ class BattleService {
             return fallbackText;
         }
 
+        // Build HP context so AI can adapt tone
+        const opponentId = Object.keys(battle.players).find((id) => id !== aiPlayerId);
+        const myHp = battle.players[aiPlayerId]?.hp ?? 100;
+        const opponentHp = opponentId ? (battle.players[opponentId]?.hp ?? 100) : 100;
+        const turnNumber = battle.messages.length;
+
         const context = battle.messages.slice(-8).map((message) => ({
             role: message.senderId === aiPlayerId ? 'assistant' : 'user',
             content: message.text
@@ -363,7 +394,8 @@ class BattleService {
             botName: botPersona.displayName,
             personaPrompt: botPersona.prompt,
             currentMessage: lastMessage,
-            context
+            context,
+            battleState: { myHp, opponentHp, turnNumber }
         });
 
         return String(aiReply || fallbackText).slice(0, 260);

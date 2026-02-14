@@ -55,6 +55,8 @@ export default function BattlePage() {
     opponent,
     myHp,
     opponentHp,
+    myRole,
+    opponentRole,
     messages,
     timer,
     stats,
@@ -71,6 +73,8 @@ export default function BattlePage() {
       opponent: state.opponent,
       myHp: state.myHp,
       opponentHp: state.opponentHp,
+      myRole: state.myRole,
+      opponentRole: state.opponentRole,
       messages: state.messages,
       timer: state.timer,
       stats: state.stats,
@@ -359,6 +363,19 @@ export default function BattlePage() {
       <Card className="relative overflow-hidden p-3 md:p-5">
         <p className="font-semibold text-white/85">Topic</p>
         <p className="mt-1 text-sm text-[var(--color-neon-cyan)] md:text-base">{topic}</p>
+
+        {myRole && (
+          <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
+            <div className="text-left">
+              <p className="text-[10px] uppercase tracking-wider text-white/45">Your Stance</p>
+              <p className="bg-gradient-to-r from-lime-300 to-emerald-300 bg-clip-text text-sm font-bold text-transparent">{myRole}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] uppercase tracking-wider text-white/45">Enemy Stance</p>
+              <p className="bg-gradient-to-r from-rose-300 to-pink-300 bg-clip-text text-sm font-bold text-transparent">{opponentRole}</p>
+            </div>
+          </div>
+        )}
       </Card>
 
       <div className="grid gap-3 md:grid-cols-[1.5fr_1fr]">
@@ -418,9 +435,8 @@ export default function BattlePage() {
                 animate={{ opacity: 1, y: -34, scale: 1 }}
                 exit={{ opacity: 0, y: -56, scale: 1.05 }}
                 transition={{ duration: reducedMotion ? 0.1 : 0.5 }}
-                className={`pointer-events-none absolute z-[var(--z-overlay)] text-2xl font-black ${
-                  burst.tone === 'toxic' ? 'text-rose-300' : burst.tone === 'good' ? 'text-lime-300' : 'text-cyan-200'
-                } ${burst.target === 'me' ? 'left-12 top-28' : 'right-12 top-28'}`}
+                className={`pointer-events-none absolute z-[var(--z-overlay)] text-2xl font-black ${burst.tone === 'toxic' ? 'text-rose-300' : burst.tone === 'good' ? 'text-lime-300' : 'text-cyan-200'
+                  } ${burst.target === 'me' ? 'left-12 top-28' : 'right-12 top-28'}`}
               >
                 -{burst.value}
               </motion.div>

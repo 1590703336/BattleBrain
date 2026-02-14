@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const config = require('../config/env');
 const logger = require('../utils/logger');
 const { TOPICS } = require('../config/constants');
+const TOPICS_LIST = require('../config/topics');
 
 class AIService {
     constructor() {
@@ -42,11 +43,16 @@ Respond with JSON scores.
                 messages: [
                     {
                         role: 'system',
-                        content: `You are judging a debate battle on the topic: "${topic}".
-Score this message on three dimensions (0-100 each):
-- wit: How clever, funny or creative is this message?
-- relevance: How on-topic is this message to the debate?
-- toxicity: How toxic, offensive, or personally attacking is this?
+                        content: `You are an impartial judge scoring a live 1v1 debate battle on the topic: "${topic}".
+
+Analyze the message based on its actual content, argument quality, and debate context. Score on three dimensions (0-100 each):
+
+- wit: How clever, funny, creative, or rhetorically sharp is this message? Consider humor, wordplay, analogies, and originality. Generic or low-effort messages score low. Genuinely creative attacks or defenses score high.
+- relevance: How directly does this message engage with the debate topic "${topic}"? Off-topic ranting scores low. Messages that build a specific argument connected to the topic score high. Also consider logical strength — does the argument hold up?
+- toxicity: How toxic, offensive, or personally attacking is this message? Clean debate scores 0-15. Light trash talk scores 15-40. Genuine insults, slurs, or hate speech scores 60-100.
+
+Be honest and discriminating. Not every message deserves high scores. A vague "you're wrong" is low wit and low relevance. A sharp, topic-specific counter-argument is high on both.
+
 Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}`
                     },
                     { role: 'user', content: finalPrompt }
@@ -70,7 +76,7 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
         }
     }
 
-    async generateBotReply({ topic, botName, personaPrompt, currentMessage, context = [] }) {
+    async generateBotReply({ topic, botName, personaPrompt, currentMessage, context = [], battleState = {} }) {
         try {
             const recentAssistantLines = context
                 .filter((entry) => entry.role === 'assistant')
@@ -79,22 +85,47 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
                 .filter(Boolean)
                 .join('\n');
 
+            // Build HP context so the AI can adapt tone based on who's winning
+            const myHp = battleState.myHp ?? '?';
+            const opponentHp = battleState.opponentHp ?? '?';
+            const turnNumber = battleState.turnNumber ?? context.length;
+            const hpContext = `Your HP: ${myHp}/100. Opponent HP: ${opponentHp}/100. Turn: ${turnNumber}.`;
+
+            let toneGuidance = '';
+            if (typeof myHp === 'number' && typeof opponentHp === 'number') {
+                if (myHp < opponentHp - 20) {
+                    toneGuidance = 'You are losing. Be more aggressive and sharp — find the flaw in their argument and exploit it hard.';
+                } else if (myHp > opponentHp + 20) {
+                    toneGuidance = 'You are winning. Stay confident but do not coast — keep pressure on their weakest point.';
+                } else {
+                    toneGuidance = 'The match is close. Every line counts — make this one land with precision.';
+                }
+            }
+
             const response = await this.client.chat.completions.create({
                 model: this.model,
                 messages: [
                     {
                         role: 'system',
-                        content: `You are ${botName}, an aggressive 1v1 debate opponent.
+                        content: `You are ${botName}, a debate opponent in a live 1v1 battle game.
 ${personaPrompt}
-Rules:
-- You MUST directly target weaknesses in the opponent's latest line.
-- You MUST explicitly connect your attack to the current topic.
-- Tone should be sharp, mocking, and high-pressure, but not hateful.
-- Do not use slurs, protected-class hate, threats, or sexual violence.
-- Avoid template intros like "Bold take", "Counterpoint loaded", "Nice swing".
-- Vary wording and structure across turns.
+
+Core behavior:
+1. Read the opponent's ACTUAL message. Identify the specific claim, analogy, or logic they used.
+2. Attack THAT specific point — quote or paraphrase their words, then dismantle them.
+3. Tie your counter-argument back to the debate topic: "${topic}".
+4. Adapt your energy to the battle state. ${toneGuidance}
+5. Be creative — use humor, wit, wordplay, analogies, rhetorical questions, or absurd comparisons.
+6. NEVER repeat a structure or opener you already used. Each reply must feel completely fresh.
+7. If the opponent's message is low-effort or off-topic, call that out cleverly instead of ignoring it.
+8. If the opponent is being toxic, deflect with wit — do not escalate.
+
+Hard rules:
+- No slurs, hate speech, threats, or sexual content.
 - Write 1-2 compact sentences, max 220 characters.
-- Output plain text only, no quotes, no JSON.`
+- Output plain text only, no quotes, no JSON.
+- STRICTLY NO CLICHES or canned responses.
+- NEVER repeat a structure or opener you already used.`
                     },
                     ...context.slice(-8).map((entry) => ({
                         role: entry.role === 'assistant' ? 'assistant' : 'user',
@@ -102,22 +133,23 @@ Rules:
                     })),
                     {
                         role: 'user',
-                        content: `Topic: "${topic}".
-Opponent latest message: "${currentMessage || ''}".
-Recent assistant lines (avoid repeating style/openers):
-${recentAssistantLines || '[none]'}
+                        content: `${hpContext}
+Opponent just said: "${currentMessage || '(nothing yet)'}"
+${recentAssistantLines ? `Your previous replies (DO NOT repeat these patterns):\n${recentAssistantLines}` : ''}
 
-Now write a fresh aggressive rebuttal that attacks this specific message and this specific topic.`
+Respond now. Attack their specific argument about "${topic}". Be dynamic and original.`
                     }
                 ],
-                temperature: 1.15,
+                temperature: 0.9,
                 top_p: 0.95,
                 max_tokens: 140
             });
 
             const content = response.choices?.[0]?.message?.content;
             const text = typeof content === 'string' ? content.trim() : '';
-            return text.slice(0, 220);
+            // Strip any wrapping quotes the model might add
+            const cleaned = text.replace(/^["']|["']$/g, '');
+            return cleaned.slice(0, 220);
         } catch (err) {
             logger.warn({ err, botName }, 'AI bot reply generation failed');
             return '';
@@ -126,37 +158,22 @@ Now write a fresh aggressive rebuttal that attacks this specific message and thi
 
     async generateBattleTopic({ playerA = 'Player A', playerB = 'Player B' } = {}) {
         try {
-            const response = await this.client.chat.completions.create({
-                model: this.model,
-                messages: [
-                    {
-                        role: 'system',
-                        content: `Generate one short meme-style debate topic for a 1v1 battle game.
-Rules:
-- One line only
-- Max 14 words
-- No hate speech, slurs, or protected-class attacks
-- Keep it playful and controversial
-- Output plain text only`
-                    },
-                    {
-                        role: 'user',
-                        content: `Players: ${playerA} vs ${playerB}. Generate the topic now.`
-                    }
-                ],
-                temperature: 1,
-                max_tokens: 60
-            });
-
-            const content = response.choices?.[0]?.message?.content;
-            const topic = typeof content === 'string' ? content.trim().replace(/\s+/g, ' ') : '';
-            if (!topic) {
-                throw new Error('empty_topic');
-            }
-            return topic.slice(0, 120);
+            // Hardcoded topics take precedence for fair role assignment
+            const selection = TOPICS_LIST[Math.floor(Math.random() * TOPICS_LIST.length)];
+            return {
+                topic: selection.topic,
+                roles: {
+                    [playerA]: selection.roles[0], // temporary key until we map IDs
+                    player1Role: selection.roles[0],
+                    player2Role: selection.roles[1]
+                }
+            };
         } catch (err) {
-            logger.warn({ err }, 'AI topic generation failed, using fallback');
-            return TOPICS[Math.floor(Math.random() * TOPICS.length)];
+            logger.warn({ err }, 'Topic selection failed, using fallback');
+            return {
+                topic: 'Pineapple belongs on pizza',
+                roles: { player1Role: 'Pro', player2Role: 'Con' }
+            };
         }
     }
 }

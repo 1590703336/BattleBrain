@@ -9,7 +9,7 @@ const mockBattleHistory: BattleHistoryResponse[] = [
   {
     id: 'hist_1',
     battleId: 'b_demo_1',
-    topic: 'If your ex texted at 2AM, what is your opening line?',
+    topic: 'Pineapple belongs on pizza',
     winner: 'opponent',
     stats: {
       myDamage: 72,
@@ -24,7 +24,7 @@ const mockBattleHistory: BattleHistoryResponse[] = [
   {
     id: 'hist_2',
     battleId: 'b_demo_2',
-    topic: 'Pitch your worst startup idea with confidence.',
+    topic: 'Cats are better pets than dogs',
     winner: 'me',
     stats: {
       myDamage: 104,

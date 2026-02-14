@@ -34,6 +34,8 @@ interface BattleState {
   battleId: string;
   topic: string;
   opponent: BattleOpponent;
+  myRole: string;
+  opponentRole: string;
   myHp: number;
   opponentHp: number;
   timer: number;
@@ -69,6 +71,8 @@ const baseState = () => ({
   battleId: '',
   topic: 'Hot takes are loading...',
   opponent: defaultOpponent,
+  myRole: '',
+  opponentRole: '',
   myHp: MAX_HP,
   opponentHp: MAX_HP,
   timer: 90,
@@ -94,6 +98,8 @@ export const useBattleStore = create<BattleState>((set) => ({
       battleId: payload.battleId,
       topic: payload.topic,
       opponent: payload.opponent,
+      myRole: payload.myRole || '',
+      opponentRole: payload.opponentRole || '',
       myHp: MAX_HP,
       opponentHp: MAX_HP,
       timer: payload.durationSec,
