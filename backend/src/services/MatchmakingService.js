@@ -1,7 +1,9 @@
-const PresenceService = require('./PresenceService');
 const BattleService = require('./BattleService');
+const User = require('../models/User');
 const { BOT_MATCH_TIMEOUT_MS, TOPICS } = require('../config/constants');
 const logger = require('../utils/logger');
+
+const QUEUE_ETA_STEP_SEC = 3;
 
 class MatchmakingService {
     constructor() {
@@ -10,8 +12,15 @@ class MatchmakingService {
     }
 
     joinQueue(userId, socketId, user) {
-        if (this.queue.some(p => p.userId === userId)) {
-            return; // Already in queue
+        const existing = this.queue.find((entry) => entry.userId === userId);
+        if (existing) {
+            existing.socketId = socketId;
+            existing.user = user;
+            const payload = this.getWaitingPayload(userId);
+            if (payload) {
+                this.emitWaitingToUser(existing.socketId, payload);
+            }
+            return payload;
         }
 
         logger.debug({ userId }, 'Joined queue');
@@ -19,80 +28,149 @@ class MatchmakingService {
         const entry = {
             userId,
             socketId,
-            user, // Full user profile
+            user,
             joinedAt: Date.now(),
-            timeoutId: setTimeout(() => this.matchWithBot(userId), BOT_MATCH_TIMEOUT_MS)
+            timeoutId: setTimeout(() => {
+                this.matchWithBot(userId).catch((err) => {
+                    logger.error({ err, userId }, 'Failed to match with bot');
+                });
+            }, BOT_MATCH_TIMEOUT_MS)
         };
 
         this.queue.push(entry);
+        const waitingPayload = this.getWaitingPayload(userId);
+        this.broadcastQueueWaiting();
         this.attemptMatch();
+        return waitingPayload;
     }
 
     leaveQueue(userId) {
-        const index = this.queue.findIndex(p => p.userId === userId);
-        if (index !== -1) {
-            clearTimeout(this.queue[index].timeoutId);
-            this.queue.splice(index, 1);
-            logger.debug({ userId }, 'Left queue');
+        const index = this.queue.findIndex((entry) => entry.userId === userId);
+        if (index === -1) {
+            return;
         }
+
+        clearTimeout(this.queue[index].timeoutId);
+        this.queue.splice(index, 1);
+        logger.debug({ userId }, 'Left queue');
+        this.broadcastQueueWaiting();
+    }
+
+    getWaitingPayload(userId) {
+        const index = this.queue.findIndex((entry) => entry.userId === userId);
+        if (index === -1) {
+            return null;
+        }
+
+        const entry = this.queue[index];
+        const position = index + 1;
+        const etaSec = this.computeEtaSec(position);
+
+        return {
+            queueId: `q_${userId}_${entry.joinedAt}`,
+            position,
+            etaSec
+        };
+    }
+
+    computeEtaSec(position) {
+        if (position <= 1) {
+            return Math.ceil(BOT_MATCH_TIMEOUT_MS / 1000);
+        }
+        return Math.max(2, (position - 1) * QUEUE_ETA_STEP_SEC);
+    }
+
+    emitWaitingToUser(socketId, payload) {
+        const io = require('../socket').getIO();
+        io.to(socketId).emit('waiting', payload);
+    }
+
+    broadcastQueueWaiting() {
+        const io = require('../socket').getIO();
+        this.queue.forEach((entry) => {
+            const payload = this.getWaitingPayload(entry.userId);
+            if (payload) {
+                io.to(entry.socketId).emit('waiting', payload);
+            }
+        });
     }
 
     attemptMatch() {
-        if (this.queue.length < 2) return;
+        if (this.queue.length < 2) {
+            return;
+        }
 
-        // Simple FIFO matching: take first two
-        // In real app: sort by ELO or level
         const player1 = this.queue.shift();
         const player2 = this.queue.shift();
 
-        // Clear their bot timeouts
         clearTimeout(player1.timeoutId);
         clearTimeout(player2.timeoutId);
 
         logger.info({ p1: player1.userId, p2: player2.userId }, 'Match found in queue');
 
-        // Create Battle
         const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
         const battleData = BattleService.createBattle(player1.user, player2.user, topic);
 
-        // Notify players (direct socket emit or via handler?)
-        // Service shouldn't emit directly usually, but for simplicity here we return data 
-        // or we can use the socket IDs we stored to emit via IO if we had access.
+        const io = require('../socket').getIO();
+        io.to(player1.socketId).emit('battle-start', battleData);
+        io.to(player2.socketId).emit('battle-start', battleData);
 
-        // Better pattern: Return match result or use callback/event emitter
-        // But since this is called async inside `joinQueue`, the caller (handler) might have returned already.
-        // So we need access to IO or a way to notify.
-
-        const io = require('../socket').getIO(); // Circular dep workaround or passed in
-
-        if (io) {
-            io.to(player1.socketId).emit('battle-start', battleData);
-            io.to(player2.socketId).emit('battle-start', battleData);
-        }
+        this.broadcastQueueWaiting();
     }
 
-    matchWithBot(userId) {
-        const index = this.queue.findIndex(p => p.userId === userId);
-        if (index === -1) return; // User left queue
+    async getOrCreateQueueBotUser() {
+        const email = 'queue.bot@battlebrain.ai';
+        let bot = await User.findOne({ email });
+
+        if (!bot) {
+            bot = await User.create({
+                email,
+                password: 'queue_bot_default',
+                displayName: 'BattleBot 3000',
+                avatarUrl: '',
+                bio: 'Queue auto-match AI bot',
+                level: 12,
+                xp: 2600,
+                stats: {
+                    wins: 120,
+                    losses: 95,
+                    draws: 10,
+                    totalBattles: 225,
+                    messageCount: 0,
+                    goodStrikes: 0,
+                    toxicStrikes: 0,
+                    totalDamageDealt: 0,
+                    totalDamageTaken: 0,
+                    avgWit: 70,
+                    avgRelevance: 65,
+                    avgToxicity: 18
+                }
+            });
+        }
+
+        const payload = bot.toJSON();
+        payload.isAi = true;
+        return payload;
+    }
+
+    async matchWithBot(userId) {
+        const index = this.queue.findIndex((entry) => entry.userId === userId);
+        if (index === -1) {
+            return;
+        }
 
         const player = this.queue.splice(index, 1)[0];
+        clearTimeout(player.timeoutId);
+
         logger.info({ userId }, 'Matched with Bot');
 
-        // Create Bot User
-        const botUser = {
-            id: 'bot_ai_001',
-            displayName: 'BattleBot 3000',
-            avatarUrl: '', // fast-load placeholder
-            stats: { totalBattles: 999, wins: 500, losses: 499, winRate: 50 }
-        };
-
+        const botUser = await this.getOrCreateQueueBotUser();
         const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
         const battleData = BattleService.createBattle(player.user, botUser, topic);
 
         const io = require('../socket').getIO();
-        if (io) {
-            io.to(player.socketId).emit('battle-start', battleData);
-        }
+        io.to(player.socketId).emit('battle-start', battleData);
+        this.broadcastQueueWaiting();
     }
 }
 

@@ -1,12 +1,5 @@
 import { motion, PanInfo } from 'framer-motion';
-
-interface MatchCandidate {
-  id: string;
-  name: string;
-  level: number;
-  humorStyle: string;
-  bio: string;
-}
+import { MatchCandidate } from '../../types/socket';
 
 interface SwipeCardProps {
   candidate: MatchCandidate;
@@ -47,7 +40,12 @@ export default function SwipeCard({ candidate, index, onSwipe }: SwipeCardProps)
             <h3 className="font-[var(--font-display)] text-2xl tracking-[0.08em]">{candidate.name}</h3>
             <p className="text-sm text-white/65">Level {candidate.level}</p>
           </div>
-          <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs">{candidate.humorStyle}</span>
+          <div className="flex flex-col items-end gap-1">
+            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs">{candidate.humorStyle}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] ${candidate.isAi ? 'border border-lime-300/30 bg-lime-300/12 text-lime-100' : 'border border-white/20 bg-white/10 text-white/70'}`}>
+              {candidate.isAi ? 'AI Agent' : 'Player'}
+            </span>
+          </div>
         </div>
 
         <p className="mt-5 rounded-2xl border border-white/12 bg-black/20 p-4 text-sm leading-relaxed text-white/80">{candidate.bio}</p>
@@ -60,5 +58,3 @@ export default function SwipeCard({ candidate, index, onSwipe }: SwipeCardProps)
     </motion.article>
   );
 }
-
-export type { MatchCandidate };

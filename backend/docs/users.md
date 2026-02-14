@@ -104,11 +104,11 @@ Validation:
 ## 4. Battle History
 
 Primary endpoint used by frontend records page:
-- `GET /api/battles/:userId?limit=20`
+- `GET /api/users/:userId/records?limit=20`
 
 Also available under users resource:
 - `GET /api/users/:userId/battles?limit=20`
-- `GET /api/users/:userId/records?limit=20`
+- `GET /api/battles/:userId?limit=20`
 
 Headers:
 - `Authorization: Bearer <jwt>`
@@ -140,7 +140,8 @@ Response (200):
 
 Persistence note:
 - User documents persist match history in `records` (embedded subdocuments).
-- `battles` remains as a legacy compatibility field and is read only when `records` is empty.
+- New battle writes are stored in `records`.
+- `battles` route alias exists for compatibility, but backend source-of-truth is `records`.
 
 ---
 

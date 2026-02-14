@@ -29,10 +29,7 @@ class PresenceService {
      * Mark user as offline.
      */
     goOffline(userId) {
-        if (this.onlineUsers.has(userId)) {
-            this.onlineUsers.delete(userId);
-            logger.debug({ userId }, 'User went offline');
-        }
+        return this.removeOnlineUser(userId, { reason: 'manual_offline' });
     }
 
     /**
@@ -78,13 +75,62 @@ class PresenceService {
 
         for (const [userId, entry] of this.onlineUsers) {
             if (now - entry.lastHeartbeat > PRESENCE_TIMEOUT_MS) {
-                this.onlineUsers.delete(userId);
+                this.removeOnlineUser(userId, {
+                    reason: 'heartbeat_timeout',
+                    timeSinceHeartbeat: now - entry.lastHeartbeat
+                });
                 removedIds.push(userId);
-                logger.info({ userId, timeSinceHeartbeat: now - entry.lastHeartbeat }, 'User timed out');
             }
         }
 
         return removedIds;
+    }
+
+    removeOnlineUser(userId, metadata = {}) {
+        if (!this.onlineUsers.has(userId)) {
+            return false;
+        }
+
+        this.onlineUsers.delete(userId);
+
+        logger.info(
+            { userId, ...metadata },
+            metadata.reason === 'heartbeat_timeout' ? 'User timed out and marked offline' : 'User went offline'
+        );
+
+        this.applyOfflineConsequences(userId, metadata.reason);
+        return true;
+    }
+
+    applyOfflineConsequences(userId, reason = 'disconnect') {
+        try {
+            const MatchmakingService = require('./MatchmakingService');
+            MatchmakingService.leaveQueue(userId);
+        } catch (err) {
+            logger.warn({ err, userId, reason }, 'Failed to remove offline user from queue');
+        }
+
+        try {
+            const BattleService = require('./BattleService');
+            BattleService.handleDisconnect(userId);
+        } catch (err) {
+            logger.warn({ err, userId, reason }, 'Failed to forfeit offline user battle');
+        }
+
+        try {
+            const SwipeService = require('./SwipeService');
+            SwipeService.handleUserOffline(userId);
+        } catch (err) {
+            logger.warn({ err, userId, reason }, 'Failed to cleanup swipe requests for offline user');
+        }
+
+        try {
+            const { getIO } = require('../socket');
+            const io = getIO();
+            io.emit('user-offline', { id: userId, reason });
+        } catch {
+            // Socket layer may not be initialized yet.
+        }
     }
 }
 

@@ -1,99 +1,125 @@
 # Matchmaking API
 
-This document details the matchmaking systems: **Swipe Mode** (Tinder-style) and **Queue Mode** (Traditional matchmaking).
+This document covers two matchmaking flows:
+- `Swipe Mode` (card-based, request/accept/decline)
+- `Queue Mode` (quick queue with ETA and bot fallback)
 
 ## 1. Swipe Mode
 
-Browse online users and request battles.
-
-### Emitters (Client → Server)
+### Client -> Server
 
 | Event | Payload | Description |
 |---|---|---|
-| `get-cards` | `null` | Request a deck of potential opponents (online users you haven't swiped on) |
-| `swipe-right` | `{ targetId: string }` | "Like" / Request battle with user |
-| `swipe-left` | `{ targetId: string }` | "Pass" / Skip user |
+| `get-cards` | `{}` | Load swipe deck |
+| `swipe-right` | `{ targetId: string }` | Send challenge request to target |
+| `swipe-left` | `{ targetId: string }` | Skip card |
+| `accept-battle` | `{ requestId: string }` | Accept incoming challenge |
+| `decline-battle` | `{ requestId: string }` | Decline incoming challenge |
 
-### Listeners (Server → Client)
+### Server -> Client
 
 #### `online-users`
-Response to `get-cards`. Returns a shuffled list of `User` objects.
+
+Response to `get-cards`.
+
+```json
+[
+  {
+    "id": "67af0...",
+    "displayName": "HyperNova",
+    "name": "HyperNova",
+    "avatarUrl": "",
+    "level": 16,
+    "bio": "Specialty: ultra-dry callbacks...",
+    "humorStyle": "Savage Irony",
+    "isAi": true
+  }
+]
+```
+
+Notes:
+- Backend always ensures 5 AI-backed real users exist for swipe deck.
+- Human online users are also included.
 
 #### `battle-request`
-Received when someone swipes right on you (and you haven't swiped them yet).
 
-**Payload:**
+Sent to target user after `swipe-right` (for human target).
+
 ```json
 {
-  "requestId": "req_123...",
+  "requestId": "req_1739530_8adf1c2b",
   "from": {
-    "id": "u_target",
+    "id": "67af0...",
     "displayName": "Alice",
-    "avatarUrl": "...",
+    "name": "Alice",
+    "avatarUrl": "",
     "level": 10
   },
-  "topic": "Pineapple on pizza is a crime"
-}
-```
-
-#### `battle-start`
-Received when a match is successfully made (Mutual swipe or accepted request).
-
-**Payload:**
-```json
-{
-  "id": "battle_xyz...",
   "topic": "Pineapple on pizza is a crime",
-  "startTime": 1700000000000,
-  "duration": 180000,
-  "players": {
-    "u_my_id": { "hp": 100, "user": {...} },
-    "u_opponent_id": { "hp": 100, "user": {...} }
-  }
+  "expiresInSec": 15
 }
 ```
-*Note: This event redirects the user to the Battle Screen.*
-
----
-
-## 2. Request Handling
-
-Respond to incoming `battle-request` events.
-
-### Emitters
-
-| Event | Payload | Description |
-|---|---|---|
-| `accept-battle` | `{ requestId: string }` | Accept the challenge. Triggers `battle-start` for both. |
-| `decline-battle` | `{ requestId: string }` | Decline the challenge. |
-
-### Listeners
 
 #### `battle-request-declined`
-Received if the person you swiped right on declines your request.
 
-**Payload:**
+Sent to requester when target declines.
+
 ```json
 {
-  "requestId": "req_123...",
-  "by": "u_user_who_declined"
+  "requestId": "req_1739530_8adf1c2b",
+  "by": "67af1..."
 }
 ```
 
----
+#### `battle-request-timeout`
 
-## 3. Queue Mode
+Sent when request expires or target is offline.
 
-Automatic matchmaking pool.
+```json
+{
+  "requestId": "req_1739530_8adf1c2b",
+  "targetId": "67af1...",
+  "reason": "timeout"
+}
+```
 
-### Emitters
+`reason` can be:
+- `timeout`
+- `offline`
+
+#### AI Swipe Match
+
+If target card is AI (`isAi: true`):
+- requester receives `waiting` with `etaSec: 2`
+- backend emits `battle-start` after ~2 seconds
+
+## 2. Queue Mode
+
+### Client -> Server
 
 | Event | Payload | Description |
 |---|---|---|
-| `join-queue` | `null` | specific queue handling? Currently just joins the detailed global pool. |
-| `leave-queue` | `null` | Remove self from queue. |
+| `join-queue` | `{ mode: "quick" }` | Enter quick queue |
+| `leave-queue` | `{}` | Leave queue |
 
-### Listeners
+### Server -> Client
 
-- You will strictly receive `battle-start` when matched.
-- No interaction required; just show a "Searching..." spinner until `battle-start`.
+#### `waiting`
+
+```json
+{
+  "queueId": "q_67af0_1739530534022",
+  "position": 1,
+  "etaSec": 10
+}
+```
+
+`position` and `etaSec` are computed by backend.
+
+#### `battle-start`
+
+Sent when matched (human/human or bot fallback).
+
+### Queue Bot Fallback
+
+If not matched within `BOT_MATCH_TIMEOUT_MS`, backend auto-matches with queue AI user.

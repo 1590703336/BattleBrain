@@ -6,4 +6,6 @@ Documentation for the BattleBrain backend API, organized by feature.
 
 - **[Authentication](./auth.md)** — Signup, Login, JWT management
 - **[Users](./users.md)** — Profiles, battle history, leaderboard
-- **Battle** *(Coming Soon)* — Matchmaking, Real-time Battle Events, Analysis
+- **[Matchmaking](./matchmaking.md)** — Swipe flow + queue flow
+- **[Battle](./battle.md)** — Real-time battle message protocol
+- **[Presence](./presence.md)** — Heartbeat, online/offline semantics

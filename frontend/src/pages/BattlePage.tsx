@@ -17,7 +17,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useSoundEffect } from '../hooks/useSoundEffect';
 import { useStrikeAnimation } from '../hooks/useStrikeAnimation';
 import { useBattleStore } from '../stores/battleStore';
-import { BattleEndPayload, BattleMessagePayload, BattleStateSnapshot } from '../types/socket';
+import { BattleEndPayload, BattleMessagePayload } from '../types/socket';
 import { MAX_HP } from '../utils/constants';
 
 interface DamageBurst {
@@ -145,34 +145,31 @@ export default function BattlePage() {
       }
     };
 
-    const onTick = (payload: BattleStateSnapshot) => {
-      setSnapshot(payload);
-    };
-
     const onEnd = (payload: BattleEndPayload) => {
       endBattle(payload);
       saveCurrentResult({ winner: payload.winner });
     };
 
-    const onRateLimited = (payload: { retryAfterMs: number }) => {
+    const onRateLimited = (payload: { retryAfterMs: number; reason?: string }) => {
+      if (payload.reason === 'message_too_long') {
+        setToast('Message too long. Keep it under 280 characters.');
+        return;
+      }
       setToast(`Cooldown active: retry in ${Math.ceil(payload.retryAfterMs / 1000)}s.`);
     };
 
     socket.on('battle-message', onMessage);
-    socket.on('battle-tick', onTick);
     socket.on('battle-end', onEnd);
     socket.on('rate-limited', onRateLimited);
 
     return () => {
       socket.off('battle-message', onMessage);
-      socket.off('battle-tick', onTick);
       socket.off('battle-end', onEnd);
       socket.off('rate-limited', onRateLimited);
     };
   }, [
     socket,
     ingestMessage,
-    setSnapshot,
     endBattle,
     saveCurrentResult,
     triggerStrike,
@@ -182,6 +179,22 @@ export default function BattlePage() {
     buffs.pun,
     buffs.dodge,
   ]);
+
+  useEffect(() => {
+    if (status !== 'active' || timer <= 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setSnapshot({
+        myHp,
+        opponentHp,
+        timer: Math.max(0, timer - 1),
+      });
+    }, 1000);
+
+    return () => window.clearTimeout(timeout);
+  }, [myHp, opponentHp, setSnapshot, status, timer]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({

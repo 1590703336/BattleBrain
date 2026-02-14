@@ -5,17 +5,27 @@ module.exports = (io, socket) => {
     const user = socket.user;
     const userId = user.id;
 
-    // 1. Handle go-online
-    socket.on('go-online', () => {
+    const markOnline = () => {
         PresenceService.goOnline(userId, socket.id, user);
 
-        // Broadcast to everyone else that this user is online
-        // Note: In a real app, we might only broadcast to friends or relevant scope
         socket.broadcast.emit('user-online', {
             id: user.id,
             displayName: user.displayName,
-            avatarUrl: user.avatarUrl
+            avatarUrl: user.avatarUrl,
+            level: user.level
         });
+    };
+
+    // Auto-online on socket connect (frontend does not need explicit go-online).
+    markOnline();
+
+    // Optional manual refresh hook.
+    socket.on('go-online', () => {
+        markOnline();
+    });
+
+    socket.on('go-offline', () => {
+        PresenceService.goOffline(userId);
     });
 
     // 2. Handle heartbeat
@@ -26,10 +36,6 @@ module.exports = (io, socket) => {
     // 3. Handle disconnect
     socket.on('disconnect', () => {
         PresenceService.goOffline(userId);
-
-        // Broadcast offline status
-        io.emit('user-offline', { id: userId });
-
         logger.debug({ userId, socketId: socket.id }, '👋 Socket disconnected');
     });
 };
