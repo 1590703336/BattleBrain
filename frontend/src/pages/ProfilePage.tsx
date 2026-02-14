@@ -6,8 +6,9 @@ import { useBattleStore } from '../stores/battleStore';
 import { useUserStore } from '../stores/userStore';
 
 export default function ProfilePage() {
-  const { displayName, level, xp, wins, losses, badges } = useUserStore(
+  const { id, displayName, level, xp, wins, losses, badges } = useUserStore(
     useShallow((state) => ({
+      id: state.id,
       displayName: state.displayName,
       level: state.level,
       xp: state.xp,
@@ -36,7 +37,7 @@ export default function ProfilePage() {
         <div className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
           <div>
             <h1 className="font-[var(--font-display)] text-3xl tracking-[0.08em]">{displayName}</h1>
-            <p className="mt-1 text-sm text-white/65">Arena ID: #{displayName.toLowerCase()}</p>
+            <p className="mt-1 text-sm text-white/65">Arena ID: {id}</p>
 
             <div className="mt-5 grid grid-cols-3 gap-3">
               <Stat title="Level" value={level} />
