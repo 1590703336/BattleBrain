@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import Badge from '../components/common/Badge';
 import Card from '../components/common/Card';
@@ -6,27 +5,18 @@ import { useBattleStore } from '../stores/battleStore';
 import { useUserStore } from '../stores/userStore';
 
 export default function ProfilePage() {
-  const { id, displayName, level, xp, wins, losses, badges } = useUserStore(
+  const { id, displayName, level, xp, winRate, badges } = useUserStore(
     useShallow((state) => ({
       id: state.id,
       displayName: state.displayName,
       level: state.level,
       xp: state.xp,
-      wins: state.wins,
-      losses: state.losses,
+      winRate: state.winRate,
       badges: state.badges,
     }))
   );
 
   const history = useBattleStore((state) => state.history);
-
-  const winRate = useMemo(() => {
-    const total = wins + losses;
-    if (total === 0) {
-      return 0;
-    }
-    return Math.round((wins / total) * 100);
-  }, [wins, losses]);
 
   const nextLevelXp = (level + 1) * 220;
   const progress = Math.min(100, Math.round((xp / nextLevelXp) * 100));

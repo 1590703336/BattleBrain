@@ -35,6 +35,10 @@ See [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) for the full system d
 ## Implemented in this iteration
 
 - `Landing` page with animated hero, CTA, and topic cards.
+- `Auth` pages:
+  - `/login`
+  - `/signup`
+  - JWT session persistence in localStorage
 - `Battle` page with:
   - HP bars
   - live message list
@@ -60,6 +64,8 @@ See [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) for the full system d
 | `npm run dev` | Start Vite dev server with HMR |
 | `npm run build` | Build production bundle |
 | `npm run preview` | Preview production build locally |
+| `npm run test` | Run frontend auth unit tests (Node test runner) |
+| `npm run lint` | Run TypeScript static checks |
 
 ## Environment Variables
 

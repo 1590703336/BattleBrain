@@ -4,6 +4,14 @@ const config = require('../config/env');
 const UserService = require('./UserService');
 const { ValidationError, AuthError, ConflictError } = require('../utils/errors');
 
+function isValidEmail(email) {
+    if (typeof email !== 'string') {
+        return false;
+    }
+    const trimmed = email.trim();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
 class AuthService {
     /**
      * Create a new user account.
@@ -15,6 +23,9 @@ class AuthService {
         }
         if (typeof email !== 'string' || typeof password !== 'string') {
             throw new ValidationError('email and password must be strings');
+        }
+        if (!isValidEmail(email)) {
+            throw new ValidationError('Invalid email format');
         }
         if (typeof displayName !== 'string' || !displayName.trim()) {
             throw new ValidationError('displayName is required');
@@ -47,6 +58,9 @@ class AuthService {
         }
         if (typeof email !== 'string' || typeof password !== 'string') {
             throw new ValidationError('email and password must be strings');
+        }
+        if (!isValidEmail(email)) {
+            throw new ValidationError('Invalid email format');
         }
 
         // +password to override select: false

@@ -8,6 +8,7 @@ import {
   ServerToClientEvents,
   StrikeType,
 } from '../types/socket';
+import { getStoredToken } from '../utils/authStorage';
 
 const USE_MOCK_SOCKET = import.meta.env.VITE_USE_MOCK_SOCKET !== 'false';
 
@@ -43,6 +44,9 @@ class SocketService {
       reconnectionAttempts: 8,
       reconnectionDelay: 500,
       reconnectionDelayMax: 3000,
+      auth: {
+        token: getStoredToken(),
+      },
     });
 
     this.bindRealSocket();
