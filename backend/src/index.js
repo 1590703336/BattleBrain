@@ -11,6 +11,10 @@ async function main() {
     // 2. Create HTTP server
     const server = http.createServer(app);
 
+    // 3. Setup Socket.IO
+    const { setupSocket } = require('./socket');
+    setupSocket(server);
+
     // 3. Start listening
     server.listen(config.port, () => {
         logger.info(`🚀 Server running on port ${config.port} (${config.nodeEnv})`);
@@ -36,3 +40,5 @@ main().catch((err) => {
     logger.error({ err }, 'Failed to start server');
     process.exit(1);
 });
+
+// Force restart for uuid install
