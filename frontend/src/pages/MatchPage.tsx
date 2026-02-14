@@ -134,9 +134,9 @@ export default function MatchPage() {
     setQueueing();
     setQueueStatus('searching');
     setWaitingMeta(
-      candidate.isAi ? 2 : 12,
+      candidate.isAi ? 0 : 12,
       candidate.isAi
-        ? `Locking on ${candidate.name}. AI challenger is loading...`
+        ? `Locking on ${candidate.name}. AI challenger is ready.`
         : `Challenge sent to ${candidate.name}. Waiting for response...`
     );
     socket.emit('swipe-right', { targetId: candidate.id });

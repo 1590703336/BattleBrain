@@ -9,7 +9,6 @@ module.exports = Object.freeze({
     // Matchmaking
     BOT_MATCH_TIMEOUT_MS: 10_000, // 10s before bot fallback
     SWIPE_REQUEST_TIMEOUT_MS: 15_000, // 15s for target to accept/decline
-    SWIPE_AI_MATCH_DELAY_MS: 2_000, // AI swipe match delay
 
     // Topics pool — random one assigned per battle
     TOPICS: [

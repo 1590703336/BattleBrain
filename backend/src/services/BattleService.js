@@ -5,15 +5,20 @@ const logger = require('../utils/logger');
 const AIService = require('./AIService');
 const PresenceService = require('./PresenceService');
 const User = require('../models/User');
+const AI_BOT_PERSONAS = require('../config/aiBots');
 
-const BOT_REPLY_DELAY_MS = 900;
+const GOOD_STRIKE_THRESHOLD = 50;
+const TOXIC_STRIKE_THRESHOLD = 60;
+const AI_PERSONA_BY_NAME = new Map(
+    AI_BOT_PERSONAS.map((persona) => [String(persona.displayName || '').toLowerCase(), persona])
+);
 
 function clampScore(value) {
     const num = Number(value);
     if (!Number.isFinite(num)) {
         return 0;
     }
-    return Math.max(0, Math.min(10, num));
+    return Math.max(0, Math.min(100, Math.round(num)));
 }
 
 function createDefaultStats() {
@@ -56,7 +61,6 @@ class BattleService {
                 [normalizedPlayer2.id]: { hp: INITIAL_HP, user: normalizedPlayer2, messagesCount: 0 }
             },
             messages: [],
-            aiReplyTimerId: null,
             timerId: setTimeout(() => this.endBattle(battleId, 'timeout'), BATTLE_DURATION_MS)
         };
 
@@ -131,14 +135,15 @@ class BattleService {
         let strikeType = 'neutral';
         let damageTarget = null;
 
-        if (analysis.toxicity > 6) {
+        if (analysis.toxicity >= TOXIC_STRIKE_THRESHOLD) {
             strikeType = 'toxic';
-            damage = Math.round(analysis.toxicity * 2);
+            damage = Math.min(INITIAL_HP, clampScore(analysis.toxicity));
             damageTarget = 'me';
             battle.players[senderId].hp = Math.max(0, battle.players[senderId].hp - damage);
-        } else if (analysis.wit >= 5 && analysis.relevance >= 5) {
+        } else if (analysis.wit >= GOOD_STRIKE_THRESHOLD && analysis.relevance >= GOOD_STRIKE_THRESHOLD) {
+            const goodStrikeScore = Math.round(analysis.wit * 0.55 + analysis.relevance * 0.45);
             strikeType = 'good';
-            damage = Math.round((analysis.wit + analysis.relevance) * 1.5);
+            damage = Math.min(INITIAL_HP, clampScore(goodStrikeScore));
             damageTarget = 'opponent';
             battle.players[opponentId].hp = Math.max(0, battle.players[opponentId].hp - damage);
         }
@@ -269,29 +274,32 @@ class BattleService {
             return;
         }
 
-        if (battle.aiReplyTimerId) {
-            clearTimeout(battle.aiReplyTimerId);
-        }
-
-        battle.aiReplyTimerId = setTimeout(() => {
-            battle.aiReplyTimerId = null;
-
+        (async () => {
             const latestBattle = this.activeBattles.get(battleId);
-            if (!latestBattle) {
+            if (!latestBattle || !latestBattle.players[opponentId]) {
                 return;
             }
 
-            const text = this.generateAiReply(latestBattle);
-            this.sendMessage(battleId, opponentId, text).catch((err) => {
+            const text = await this.generateAiReply(latestBattle, opponentId);
+            const liveBattle = this.activeBattles.get(battleId);
+
+            if (!liveBattle || !liveBattle.players[opponentId] || liveBattle.players[opponentId].hp <= 0) {
+                return;
+            }
+
+            await this.sendMessage(battleId, opponentId, text);
+        })()
+            .catch((err) => {
                 logger.warn({ err, battleId, opponentId }, 'AI reply failed');
             });
-        }, BOT_REPLY_DELAY_MS);
     }
 
-    generateAiReply(battle) {
+    async generateAiReply(battle, aiPlayerId) {
         const lastMessage = battle.messages[battle.messages.length - 1]?.text || '';
         const topic = battle.topic || 'this debate';
-        const openers = [
+        const aiPlayer = battle.players[aiPlayerId]?.user;
+        const botPersona = AI_PERSONA_BY_NAME.get(String(aiPlayer?.displayName || aiPlayer?.name || '').toLowerCase());
+        const fallbackOpeners = [
             `Bold take. On "${topic}", your angle still needs backup.`,
             `You came in loud, but "${topic}" needs sharper logic.`,
             `On "${topic}", that line had speed but no steering.`,
@@ -302,8 +310,26 @@ class BattleService {
             ? `Counterpoint: "${lastMessage.slice(0, 48)}..." is not carrying this round.`
             : 'Counterpoint loaded.';
 
-        const opener = openers[Math.floor(Math.random() * openers.length)];
-        return `${opener} ${callback}`.slice(0, 260);
+        const fallbackText = `${fallbackOpeners[Math.floor(Math.random() * fallbackOpeners.length)]} ${callback}`.slice(0, 260);
+
+        if (!botPersona?.prompt) {
+            return fallbackText;
+        }
+
+        const context = battle.messages.slice(-8).map((message) => ({
+            role: message.senderId === aiPlayerId ? 'assistant' : 'user',
+            content: message.text
+        }));
+
+        const aiReply = await AIService.generateBotReply({
+            topic,
+            botName: botPersona.displayName,
+            personaPrompt: botPersona.prompt,
+            currentMessage: lastMessage,
+            context
+        });
+
+        return String(aiReply || fallbackText).slice(0, 260);
     }
 
     mapEndReason(reason) {
@@ -341,9 +367,6 @@ class BattleService {
         }
 
         clearTimeout(battle.timerId);
-        if (battle.aiReplyTimerId) {
-            clearTimeout(battle.aiReplyTimerId);
-        }
         this.activeBattles.delete(battleId);
 
         const winnerId = this.determineWinnerId(battle, explicitWinnerId);

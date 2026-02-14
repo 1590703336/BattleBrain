@@ -4,44 +4,7 @@ const User = require('../models/User');
 const config = require('../config/env');
 const logger = require('../utils/logger');
 const { SWIPE_REQUEST_TIMEOUT_MS } = require('../config/constants');
-
-const AI_SWIPE_USERS = [
-    {
-        email: 'swipe.bot.1@battlebrain.ai',
-        displayName: 'HyperNova',
-        level: 16,
-        humorStyle: 'Savage Irony',
-        bio: 'Specialty: ultra-dry callbacks and fake-corporate roast format.'
-    },
-    {
-        email: 'swipe.bot.2@battlebrain.ai',
-        displayName: 'PixelRuin',
-        level: 12,
-        humorStyle: 'Pun Burst',
-        bio: 'Chains puns with escalating absurdity. High variance, high danger.'
-    },
-    {
-        email: 'swipe.bot.3@battlebrain.ai',
-        displayName: 'LaughShard',
-        level: 18,
-        humorStyle: 'Deadpan Chaos',
-        bio: 'Pretends calm, then drops one-line devastation every few seconds.'
-    },
-    {
-        email: 'swipe.bot.4@battlebrain.ai',
-        displayName: 'JokeVector',
-        level: 14,
-        humorStyle: 'Meme Sniper',
-        bio: 'Meta meme references with precise timing and minimal mercy.'
-    },
-    {
-        email: 'swipe.bot.5@battlebrain.ai',
-        displayName: 'QuipForge',
-        level: 15,
-        humorStyle: 'Sarcasm Press',
-        bio: 'Turns simple prompts into layered sarcasm and comeback pressure.'
-    }
-];
+const AI_BOT_PERSONAS = require('../config/aiBots');
 
 class SwipeService {
     constructor() {
@@ -58,7 +21,7 @@ class SwipeService {
     }
 
     async ensureAiUsers() {
-        if (this.aiCardsById.size === AI_SWIPE_USERS.length) {
+        if (this.aiCardsById.size === AI_BOT_PERSONAS.length) {
             return [...this.aiCardsById.values()];
         }
 
@@ -77,7 +40,7 @@ class SwipeService {
     async bootstrapAiUsers() {
         const cards = [];
 
-        for (const [index, seed] of AI_SWIPE_USERS.entries()) {
+        for (const [index, seed] of AI_BOT_PERSONAS.entries()) {
             let bot = await User.findOne({ email: seed.email });
 
             if (!bot) {

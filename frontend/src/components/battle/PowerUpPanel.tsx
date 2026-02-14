@@ -46,7 +46,7 @@ export default function PowerUpPanel({ cooldowns, onActivate }: PowerUpPanelProp
       <PowerCell
         refEl={refs.pun}
         title="Pun Attack"
-        subtitle="Raise good-strike odds"
+        subtitle="Raise good strike odds"
         cooldown={cooldowns.pun}
         onClick={() => trigger('pun')}
       />

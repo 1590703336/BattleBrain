@@ -13,6 +13,8 @@ import {
 import { getStoredToken, getStoredUser } from '../utils/authStorage';
 
 const USE_MOCK_SOCKET = import.meta.env.VITE_USE_MOCK_SOCKET !== 'false';
+const GOOD_STRIKE_THRESHOLD = 50;
+const TOXIC_STRIKE_THRESHOLD = 60;
 
 type ServerEventName = keyof ServerToClientEvents;
 type Listener<K extends ServerEventName> = Parameters<ServerToClientEvents[K]>[0] extends never
@@ -28,6 +30,14 @@ function normalizeStrikeType(input: unknown): StrikeType {
     return 'toxic';
   }
   return 'neutral';
+}
+
+function clampPercent(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(num)));
 }
 
 function normalizeTimerFromDuration(rawDuration: unknown): number {
@@ -256,9 +266,9 @@ class SocketService {
       text: String(raw.message || ''),
       strikeType,
       scores: {
-        wit: Math.max(0, Math.round(Number(analysis.wit || 0))),
-        relevance: Math.max(0, Math.round(Number(analysis.relevance || 0))),
-        toxicity: Math.max(0, Math.round(Number(analysis.toxicity || 0))),
+        wit: clampPercent(analysis.wit),
+        relevance: clampPercent(analysis.relevance),
+        toxicity: clampPercent(analysis.toxicity),
       },
       damage,
       damageTarget,
@@ -570,19 +580,18 @@ class MockBattleGateway {
       return;
     }
 
-    window.setTimeout(() => {
-      if (!this.battle || this.battle.finished) {
-        return;
-      }
-      const enemyText = this.enemyReplies()[Math.floor(Math.random() * this.enemyReplies().length)];
-      const enemy = this.buildMessage('opponent', enemyText);
-      this.applyMessage(enemy);
-      this.emitServerEvent('battle-message', {
-        message: enemy,
-        snapshot: this.snapshot(),
-      });
-      this.checkEnd('hp-zero');
-    }, 520);
+    if (!this.battle || this.battle.finished) {
+      return;
+    }
+
+    const enemyText = this.enemyReplies()[Math.floor(Math.random() * this.enemyReplies().length)];
+    const enemy = this.buildMessage('opponent', enemyText);
+    this.applyMessage(enemy);
+    this.emitServerEvent('battle-message', {
+      message: enemy,
+      snapshot: this.snapshot(),
+    });
+    this.checkEnd('hp-zero');
   }
 
   private startTicking() {
@@ -602,8 +611,14 @@ class MockBattleGateway {
   }
 
   private buildMessage(role: BattleMessage['role'], text: string): BattleMessage {
-    const strike = this.pickStrike();
-    const damage = this.damageByStrike(strike);
+    const scores = {
+      wit: this.rand(35, 96),
+      relevance: this.rand(32, 95),
+      toxicity: this.rand(4, 88),
+    };
+    const strike = this.pickStrike(scores);
+    const damage = this.damageByScores(strike, scores);
+    const damageTarget = this.damageTargetByStrike(role, strike);
 
     return {
       id: crypto.randomUUID(),
@@ -611,12 +626,8 @@ class MockBattleGateway {
       text,
       strikeType: strike,
       damage,
-      damageTarget: role === 'me' ? 'opponent' : 'me',
-      scores: {
-        wit: this.rand(45, 98),
-        relevance: this.rand(40, 95),
-        toxicity: this.rand(8, 80),
-      },
+      damageTarget,
+      scores,
       ts: Date.now(),
     };
   }
@@ -682,25 +693,34 @@ class MockBattleGateway {
     };
   }
 
-  private pickStrike(): StrikeType {
-    const n = Math.random();
-    if (n > 0.68) {
-      return 'good';
-    }
-    if (n < 0.2) {
+  private pickStrike(scores: BattleMessage['scores']): StrikeType {
+    if (scores.toxicity >= TOXIC_STRIKE_THRESHOLD) {
       return 'toxic';
+    }
+    if (scores.wit >= GOOD_STRIKE_THRESHOLD && scores.relevance >= GOOD_STRIKE_THRESHOLD) {
+      return 'good';
     }
     return 'neutral';
   }
 
-  private damageByStrike(strike: StrikeType) {
+  private damageByScores(strike: StrikeType, scores: BattleMessage['scores']) {
     if (strike === 'good') {
-      return this.rand(10, 18);
+      return Math.round(scores.wit * 0.55 + scores.relevance * 0.45);
     }
     if (strike === 'toxic') {
-      return this.rand(8, 14);
+      return Math.round(scores.toxicity);
     }
-    return this.rand(3, 8);
+    return 0;
+  }
+
+  private damageTargetByStrike(role: BattleMessage['role'], strike: StrikeType): BattleMessage['damageTarget'] {
+    if (strike === 'neutral') {
+      return null;
+    }
+    if (strike === 'toxic') {
+      return role === 'me' ? 'me' : 'opponent';
+    }
+    return role === 'me' ? 'opponent' : 'me';
   }
 
   private rand(min: number, max: number) {

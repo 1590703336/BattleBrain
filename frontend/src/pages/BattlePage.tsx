@@ -89,6 +89,7 @@ export default function BattlePage() {
   const [cooldowns, setCooldowns] = useState<PowerState>({ meme: 0, pun: 0, dodge: 0 });
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
   const [sending, setSending] = useState(false);
+  const [waitingOpponent, setWaitingOpponent] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -115,6 +116,10 @@ export default function BattlePage() {
       playStrike(message.strikeType);
       if (message.role === 'me') {
         setSending(false);
+        setWaitingOpponent(true);
+      }
+      if (message.role === 'opponent') {
+        setWaitingOpponent(false);
       }
 
       if (message.role === 'me') {
@@ -158,11 +163,13 @@ export default function BattlePage() {
       endBattle(payload);
       saveCurrentResult({ winner: payload.winner });
       setSending(false);
+      setWaitingOpponent(false);
       socket.emit('get-cards', {});
     };
 
     const onRateLimited = (payload: { retryAfterMs: number; reason?: string }) => {
       setSending(false);
+      setWaitingOpponent(false);
       if (payload.reason === 'message_too_long') {
         setToast('Message too long. Keep it under 280 characters.');
         return;
@@ -242,6 +249,12 @@ export default function BattlePage() {
     }
   }, [status]);
 
+  useEffect(() => {
+    if (status !== 'active') {
+      setWaitingOpponent(false);
+    }
+  }, [status, battleId]);
+
   const activatePower = (name: keyof PowerState) => {
     if (status !== 'active' || cooldowns[name] > 0) {
       return;
@@ -277,6 +290,7 @@ export default function BattlePage() {
       text: decorated.slice(0, 280),
     });
     setSending(true);
+    setWaitingOpponent(false);
     setDraft('');
   };
 
@@ -367,6 +381,29 @@ export default function BattlePage() {
             ) : (
               messages.map((message) => <ChatMessage key={message.id} {...message} />)
             )}
+
+            <AnimatePresence>
+              {waitingOpponent && status === 'active' ? (
+                <motion.div
+                  key="waiting-opponent"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: reducedMotion ? 0.1 : 0.24 }}
+                  className="mx-auto mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/8 px-3 py-1 text-xs tracking-[0.08em] text-cyan-100"
+                >
+                  <span>Waiting opponent reply</span>
+                  {[0, 1, 2].map((dot) => (
+                    <motion.span
+                      key={dot}
+                      animate={{ opacity: reducedMotion ? 1 : [0.35, 1, 0.35], y: reducedMotion ? 0 : [0, -2, 0] }}
+                      transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.12, ease: 'easeInOut' }}
+                      className="h-1.5 w-1.5 rounded-full bg-cyan-200"
+                    />
+                  ))}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
 
           <AnimatePresence>

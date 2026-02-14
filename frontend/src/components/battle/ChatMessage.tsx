@@ -45,9 +45,9 @@ export default function ChatMessage({ role, strikeType, damage, scores, text, ts
         {role !== 'system' ? (
           <div className="mt-2 flex gap-3 text-[11px] text-white/65">
             <span>Dmg {damage}</span>
-            <span>Wit {scores.wit}</span>
-            <span>Rel {scores.relevance}</span>
-            <span>Tox {scores.toxicity}</span>
+            <span>Wit {scores.wit}%</span>
+            <span>Rel {scores.relevance}%</span>
+            <span>Tox {scores.toxicity}%</span>
           </div>
         ) : null}
       </div>

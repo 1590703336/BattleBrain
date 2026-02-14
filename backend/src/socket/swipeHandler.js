@@ -1,7 +1,7 @@
 const SwipeService = require('../services/SwipeService');
 const BattleService = require('../services/BattleService');
 const PresenceService = require('../services/PresenceService');
-const { SWIPE_AI_MATCH_DELAY_MS, TOPICS } = require('../config/constants');
+const { TOPICS } = require('../config/constants');
 const logger = require('../utils/logger');
 
 function randomTopic() {
@@ -40,19 +40,17 @@ module.exports = (io, socket) => {
                 const waitingPayload = {
                     queueId: `swipe_ai_${Date.now()}`,
                     position: 1,
-                    etaSec: Math.ceil(SWIPE_AI_MATCH_DELAY_MS / 1000)
+                    etaSec: 0
                 };
 
                 socket.emit('waiting', waitingPayload);
 
-                setTimeout(() => {
-                    if (socket.disconnected) {
-                        return;
-                    }
+                if (socket.disconnected) {
+                    return;
+                }
 
-                    const battleData = BattleService.createBattle(user, result.data.opponent, result.data.topic);
-                    socket.emit('battle-start', battleData);
-                }, SWIPE_AI_MATCH_DELAY_MS);
+                const battleData = BattleService.createBattle(user, result.data.opponent, result.data.topic);
+                socket.emit('battle-start', battleData);
                 return;
             }
 

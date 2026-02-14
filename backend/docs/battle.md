@@ -43,10 +43,10 @@ Or for length violation:
   "senderId": "67af0...",
   "message": "Pineapple adds balance to salty cheese.",
   "analysis": {
-    "wit": 8,
-    "relevance": 9,
-    "toxicity": 1,
-    "damage": 26,
+    "wit": 82,
+    "relevance": 90,
+    "toxicity": 11,
+    "damage": 86,
     "strikeType": "good",
     "damageTarget": "opponent"
   },
@@ -61,6 +61,12 @@ Or for length violation:
 - `good`
 - `toxic`
 - `neutral`
+
+Scoring and HP rules (percentage-based):
+- `wit`, `relevance`, `toxicity` are `0-100`.
+- `toxic`: when `toxicity >= 60`, damage = `toxicity` and target = sender (`damageTarget: "me"`).
+- `good`: when `wit >= 50` and `relevance >= 50` (and not toxic), damage = `round(wit * 0.55 + relevance * 0.45)` and target = opponent.
+- `neutral`: otherwise, `damage = 0`, `damageTarget = null`.
 
 ### `battle-end`
 
