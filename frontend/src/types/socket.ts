@@ -74,7 +74,7 @@ export interface BattleRequestPayload {
     level: number;
     avatarUrl: string;
   };
-  topic: string;
+  topic?: string;
   expiresInSec?: number;
 }
 

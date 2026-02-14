@@ -11,7 +11,7 @@ class SwipeService {
         // Set<"userId1:userId2"> - sorted so "a:b" is the same as "b:a"
         this.swipedPairs = new Set();
 
-        // Map<requestId, { requestId, from, to, topic, createdAt, timeoutId }>
+        // Map<requestId, { requestId, from, to, createdAt, timeoutId }>
         this.pendingRequests = new Map();
 
         // Map<userId, AI card payload>
@@ -118,7 +118,7 @@ class SwipeService {
         return shuffled.slice(0, deckSize);
     }
 
-    async swipeRight(fromUser, targetId, topic) {
+    async swipeRight(fromUser, targetId) {
         const cards = await this.ensureAiUsers();
         const normalizedFrom = this.sanitizeRequestUser(fromUser);
         const pairId = this._getPairId(normalizedFrom.id, targetId);
@@ -129,8 +129,7 @@ class SwipeService {
             return {
                 action: 'ai-match',
                 data: {
-                    opponent: aiCard,
-                    topic
+                    opponent: aiCard
                 }
             };
         }
@@ -169,7 +168,6 @@ class SwipeService {
             requestId,
             from: normalizedFrom,
             to: { id: targetId },
-            topic: topic || 'Random Topic',
             createdAt: Date.now(),
             timeoutId: null
         };

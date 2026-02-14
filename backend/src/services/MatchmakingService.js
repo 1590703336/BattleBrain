@@ -1,9 +1,15 @@
 const BattleService = require('./BattleService');
+const AIService = require('./AIService');
 const User = require('../models/User');
-const { BOT_MATCH_TIMEOUT_MS, TOPICS } = require('../config/constants');
+const { BOT_MATCH_TIMEOUT_MS } = require('../config/constants');
 const logger = require('../utils/logger');
 
 const QUEUE_ETA_STEP_SEC = 3;
+const TOPIC_GENERATION_MIN_WAIT_MS = 900;
+
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 class MatchmakingService {
     constructor() {
@@ -40,7 +46,9 @@ class MatchmakingService {
         this.queue.push(entry);
         const waitingPayload = this.getWaitingPayload(userId);
         this.broadcastQueueWaiting();
-        this.attemptMatch();
+        this.attemptMatch().catch((err) => {
+            logger.error({ err }, 'Queue match attempt failed');
+        });
         return waitingPayload;
     }
 
@@ -95,7 +103,7 @@ class MatchmakingService {
         });
     }
 
-    attemptMatch() {
+    async attemptMatch() {
         if (this.queue.length < 2) {
             return;
         }
@@ -108,10 +116,20 @@ class MatchmakingService {
 
         logger.info({ p1: player1.userId, p2: player2.userId }, 'Match found in queue');
 
-        const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+        const io = require('../socket').getIO();
+        const topicEtaSec = Math.ceil(TOPIC_GENERATION_MIN_WAIT_MS / 1000);
+        io.to(player1.socketId).emit('waiting', { queueId: `topic_${Date.now()}`, position: 1, etaSec: topicEtaSec });
+        io.to(player2.socketId).emit('waiting', { queueId: `topic_${Date.now()}_2`, position: 1, etaSec: topicEtaSec });
+
+        const [topic] = await Promise.all([
+            AIService.generateBattleTopic({
+                playerA: player1.user?.displayName || player1.user?.name || 'Player A',
+                playerB: player2.user?.displayName || player2.user?.name || 'Player B'
+            }),
+            wait(TOPIC_GENERATION_MIN_WAIT_MS)
+        ]);
         const battleData = BattleService.createBattle(player1.user, player2.user, topic);
 
-        const io = require('../socket').getIO();
         io.to(player1.socketId).emit('battle-start', battleData);
         io.to(player2.socketId).emit('battle-start', battleData);
 
@@ -165,10 +183,23 @@ class MatchmakingService {
         logger.info({ userId }, 'Matched with Bot');
 
         const botUser = await this.getOrCreateQueueBotUser();
-        const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+        const io = require('../socket').getIO();
+        const topicEtaSec = Math.ceil(TOPIC_GENERATION_MIN_WAIT_MS / 1000);
+        io.to(player.socketId).emit('waiting', {
+            queueId: `topic_${Date.now()}_${userId}`,
+            position: 1,
+            etaSec: topicEtaSec
+        });
+
+        const [topic] = await Promise.all([
+            AIService.generateBattleTopic({
+                playerA: player.user?.displayName || player.user?.name || 'Player A',
+                playerB: botUser?.displayName || botUser?.name || 'Battle Bot'
+            }),
+            wait(TOPIC_GENERATION_MIN_WAIT_MS)
+        ]);
         const battleData = BattleService.createBattle(player.user, botUser, topic);
 
-        const io = require('../socket').getIO();
         io.to(player.socketId).emit('battle-start', battleData);
         this.broadcastQueueWaiting();
     }

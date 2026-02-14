@@ -17,6 +17,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useSoundEffect } from '../hooks/useSoundEffect';
 import { useStrikeAnimation } from '../hooks/useStrikeAnimation';
 import { useBattleStore } from '../stores/battleStore';
+import { useMatchStore } from '../stores/matchStore';
 import { BattleEndPayload, BattleMessagePayload } from '../types/socket';
 import { MAX_HP } from '../utils/constants';
 
@@ -96,6 +97,7 @@ export default function BattlePage() {
   const endSoundPlayedRef = useRef(false);
 
   const { triggerStrike } = useStrikeAnimation(arenaRef, reducedMotion);
+  const resetMatchQueue = useMatchStore((state) => state.reset);
 
   useEffect(() => {
     if (status === 'idle' || status === 'queueing' || !battleId || battleId !== id) {
@@ -164,6 +166,7 @@ export default function BattlePage() {
       saveCurrentResult({ winner: payload.winner });
       setSending(false);
       setWaitingOpponent(false);
+      resetMatchQueue();
       socket.emit('get-cards', {});
     };
 
@@ -191,6 +194,7 @@ export default function BattlePage() {
     ingestMessage,
     endBattle,
     saveCurrentResult,
+    resetMatchQueue,
     triggerStrike,
     playStrike,
     reducedMotion,
@@ -475,12 +479,20 @@ export default function BattlePage() {
                   variant="ghost"
                   onClick={() => {
                     resetCurrent();
+                    resetMatchQueue();
                     navigate('/');
                   }}
                 >
                   Back Homepage
                 </Button>
-                <Button onClick={() => navigate('/result/demo')}>Records</Button>
+                <Button
+                  onClick={() => {
+                    resetMatchQueue();
+                    navigate('/result/demo');
+                  }}
+                >
+                  Records
+                </Button>
               </div>
             </motion.div>
           </motion.div>
