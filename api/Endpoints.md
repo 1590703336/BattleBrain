@@ -410,10 +410,13 @@ Send a debate message during an active battle. Message is analyzed by AI for wit
 
 **Emit:**
 ```javascript
-socket.emit('send-message', 'Your argument has fewer layers than a sheet of paper');
+socket.emit('send-message', {
+  battleId: currentBattleId,
+  text: 'Your argument has fewer layers than a sheet of paper'
+});
 ```
 
-**Payload:** `string` — the message text (max 280 characters)
+**Payload:** `{ battleId: string, text: string }` where `text` is max 280 characters
 
 **Server Response Events:**
 - [`battle-message`](#battle-message) — sent to both players with analysis results
@@ -473,7 +476,7 @@ socket.on('online-users', (cards) => {
 | `stats.totalBattles` | `number` | Total battles played |
 | `stats.wins` | `number` | Total wins |
 | `stats.losses` | `number` | Total losses |
-| `stats.avgWitScore` | `number` | Average wit score (0–10) |
+| `stats.avgWitScore` | `number` | Average wit score (0–100) |
 | `stats.winStreak` | `number` | Current win streak |
 
 ---
@@ -599,13 +602,20 @@ Received after emitting `join-queue`. Indicates you're in the matchmaking queue.
 
 **Listen:**
 ```javascript
-socket.on('waiting', () => {
-  console.log('In queue... waiting for opponent');
+socket.on('waiting', (payload) => {
+  console.log('In queue... waiting for opponent', payload.position, payload.etaSec);
   // Show loading/searching UI
 });
 ```
 
-**Payload:** None
+**Payload:**
+```json
+{
+  "queueId": "q_67af0_1739530534022",
+  "position": 1,
+  "etaSec": 10
+}
+```
 
 ---
 
@@ -679,7 +689,7 @@ socket.on('battle-message', (data) => {
   setOpponentHp(data.state[opponentId].hp);
 
   // Trigger animation based on strike type
-  if (data.analysis.strikeType === 'good-strike') {
+  if (data.analysis.strikeType === 'good') {
     playStrikeAnimation();
   } else if (data.analysis.strikeType === 'toxic') {
     playToxicAnimation();
@@ -693,11 +703,12 @@ socket.on('battle-message', (data) => {
   "senderId": "65a1b2c3d4e5f6a7b8c9d0e1",
   "message": "Your argument has fewer layers than a sheet of paper",
   "analysis": {
-    "wit": 8,
-    "relevance": 7,
-    "toxicity": 1,
-    "damage": 25,
-    "strikeType": "good-strike"
+    "wit": 82,
+    "relevance": 77,
+    "toxicity": 10,
+    "damage": 80,
+    "strikeType": "good",
+    "damageTarget": "opponent"
   },
   "state": {
     "65a1b2c3d4e5f6a7b8c9d0e1": { "hp": 100 },
@@ -710,11 +721,12 @@ socket.on('battle-message', (data) => {
 |-------|------|-------------|
 | `senderId` | `string` | ID of the player who sent the message |
 | `message` | `string` | The message text |
-| `analysis.wit` | `number` | Wit/humor score (0–10) |
-| `analysis.relevance` | `number` | Topic relevance score (0–10) |
-| `analysis.toxicity` | `number` | Toxicity score (0–10, higher = more toxic) |
-| `analysis.damage` | `number` | HP damage dealt (positive = opponent loses HP, negative = self-damage from toxicity) |
-| `analysis.strikeType` | `string` | One of: `"good-strike"`, `"toxic"`, `"neutral"` |
+| `analysis.wit` | `number` | Wit/humor score (0–100) |
+| `analysis.relevance` | `number` | Topic relevance score (0–100) |
+| `analysis.toxicity` | `number` | Toxicity score (0–100, higher = more toxic) |
+| `analysis.damage` | `number` | HP damage dealt (always non-negative) |
+| `analysis.strikeType` | `string` | One of: `"good"`, `"toxic"`, `"neutral"` |
+| `analysis.damageTarget` | `string \| null` | `"opponent"` / `"me"` / `null` |
 | `state` | `object` | Current HP for all players, keyed by user ID |
 | `state[id].hp` | `number` | Current HP (starts at 100, battle ends at 0) |
 
@@ -722,8 +734,8 @@ socket.on('battle-message', (data) => {
 
 | Type | Condition | Effect |
 |------|-----------|--------|
-| `good-strike` | Low toxicity + high relevance + high wit | Opponent loses HP |
-| `toxic` | High toxicity (> 6) | **Sender** loses HP (self-damage) |
+| `good` | `wit >= 50` and `relevance >= 50` (and not toxic) | Opponent loses HP by weighted score |
+| `toxic` | `toxicity >= 60` | **Sender** loses HP (self-damage) |
 | `neutral` | Everything else | No HP change |
 
 ---
@@ -861,7 +873,7 @@ interface UserCard {
     totalBattles: number;
     wins: number;
     losses: number;
-    avgWitScore: number;    // 0-10
+    avgWitScore: number;    // 0-100
     winStreak: number;
   };
 }
@@ -873,11 +885,12 @@ Returned in `battle-message` events.
 
 ```typescript
 interface MessageAnalysis {
-  wit: number;           // 0-10
-  relevance: number;     // 0-10
-  toxicity: number;      // 0-10
-  damage: number;        // positive = opponent, negative = self
-  strikeType: 'good-strike' | 'toxic' | 'neutral';
+  wit: number;           // 0-100
+  relevance: number;     // 0-100
+  toxicity: number;      // 0-100
+  damage: number;        // non-negative damage value
+  strikeType: 'good' | 'toxic' | 'neutral';
+  damageTarget: 'me' | 'opponent' | null;
 }
 ```
 

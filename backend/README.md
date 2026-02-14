@@ -10,7 +10,7 @@ AI-moderated real-time debate arena — the backend server powering Meme Battle 
 | HTTP Framework | Express |
 | WebSockets | Socket.IO |
 | AI Model | GPT-oss 120b via OpenRouter (evaluate wit, relevance & toxicity) |
-| Database | MongoDB via Mongoose (users, battles, stats, XP) |
+| Database | MongoDB via Mongoose (users, records, stats, XP) |
 | Auth | JWT (jsonwebtoken) + bcrypt |
 | Logging | pino + pino-pretty |
 | Concurrency | async-mutex |
@@ -59,15 +59,26 @@ See [backend/docs](./docs/README.md) for detailed API documentation by feature.
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `join-queue` | — | Enter the matchmaking queue |
-| `send-message` | `string` (message text) | Send a debate message during battle |
+| `join-queue` | `{ mode: "quick" }` | Enter quick queue |
+| `leave-queue` | `{}` | Leave queue |
+| `get-cards` | `{}` | Load swipe cards |
+| `swipe-right` | `{ targetId }` | Send challenge request |
+| `swipe-left` | `{ targetId }` | Skip card |
+| `accept-battle` | `{ requestId }` | Accept incoming challenge |
+| `decline-battle` | `{ requestId }` | Decline incoming challenge |
+| `send-message` | `{ battleId, text }` | Send battle message |
+| `heartbeat` | `{}` | Keep presence alive |
 
 #### Server → Client
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `waiting` | — | Player is in queue, waiting for opponent |
-| `battle-start` | `{ battleId, topic, opponent }` | Battle matched, topic assigned |
+| `online-users` | `MatchCandidate[]` | Swipe deck users (human + AI) |
+| `waiting` | `{ queueId, position, etaSec }` | Waiting/ETA update |
+| `battle-request` | `{ requestId, from, topic, expiresInSec }` | Incoming swipe challenge |
+| `battle-request-declined` | `{ requestId, by }` | Challenge declined |
+| `battle-request-timeout` | `{ requestId?, targetId?, reason }` | Timeout or offline |
+| `battle-start` | `{ id, battleId, topic, players, durationSec }` | Battle matched |
 | `battle-message` | `{ senderId, message, analysis, state }` | Message analyzed, HP updated |
-| `battle-end` | `{ winner, finalState }` | Battle is over |
-| `rate-limited` | `{ cooldownRemaining }` | Message rejected (too fast) |
+| `battle-end` | `{ battleId, winner, reason, finalState }` | Battle is over |
+| `rate-limited` | `{ reason, cooldownRemaining? }` | Message rejected |

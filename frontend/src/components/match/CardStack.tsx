@@ -1,5 +1,6 @@
 import { AnimatePresence } from 'framer-motion';
-import SwipeCard, { MatchCandidate } from './SwipeCard';
+import { MatchCandidate } from '../../types/socket';
+import SwipeCard from './SwipeCard';
 
 interface CardStackProps {
   cards: MatchCandidate[];

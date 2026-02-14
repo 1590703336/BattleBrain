@@ -1,106 +1,200 @@
+const { randomUUID } = require('crypto');
 const PresenceService = require('./PresenceService');
+const User = require('../models/User');
+const config = require('../config/env');
 const logger = require('../utils/logger');
-const { v4: uuidv4 } = require('uuid');
+const { SWIPE_REQUEST_TIMEOUT_MS } = require('../config/constants');
+const AI_BOT_PERSONAS = require('../config/aiBots');
 
 class SwipeService {
     constructor() {
-        // Set<"userId1:userId2"> - sorted so "a:b" is same as "b:a"
+        // Set<"userId1:userId2"> - sorted so "a:b" is the same as "b:a"
         this.swipedPairs = new Set();
 
-        // Map<requestId, { requestId, from: User, to: User, topic, createdAt }>
+        // Map<requestId, { requestId, from, to, topic, createdAt, timeoutId }>
         this.pendingRequests = new Map();
 
-        // Clean up stale requests every minute
-        setInterval(() => this.cleanupRequests(), 60_000);
+        // Map<userId, AI card payload>
+        this.aiCardsById = new Map();
+
+        this.aiBootstrapPromise = null;
     }
 
-    /**
-     * Get deck of cards (online users) for a user.
-     * Excludes self and anyone already swiped on (either direction).
-     */
-    getCards(userId) {
-        const onlineUsers = PresenceService.getOnlineUsers(userId);
-
-        // Filter out users already swiped
-        return onlineUsers.filter(target => {
-            const pairId = this._getPairId(userId, target.id);
-            return !this.swipedPairs.has(pairId);
-        });
-    }
-
-    /**
-     * Process a right swipe.
-     * Returns { action: 'match' | 'request', data: ... }
-     */
-    swipeRight(fromUser, targetId, topic) {
-        const targetSocketId = PresenceService.getSocketId(targetId);
-        if (!targetSocketId) {
-            throw new Error('User is offline');
+    async ensureAiUsers() {
+        if (this.aiCardsById.size === AI_BOT_PERSONAS.length) {
+            return [...this.aiCardsById.values()];
         }
 
-        const pairId = this._getPairId(fromUser.id, targetId);
+        if (this.aiBootstrapPromise) {
+            return this.aiBootstrapPromise;
+        }
 
-        // Check if target already requested a battle (mutual match)
-        // In a real app we'd track "likes" separately, but here "swipe right" = "battle request"
-        // So if there is a pending request FROM target TO me, it's a match.
+        this.aiBootstrapPromise = this.bootstrapAiUsers()
+            .finally(() => {
+                this.aiBootstrapPromise = null;
+            });
 
-        // Find pending request from target to me
-        const existingReq = [...this.pendingRequests.values()].find(
-            req => req.from.id === targetId && req.to.id === fromUser.id
-        );
+        return this.aiBootstrapPromise;
+    }
 
-        if (existingReq) {
-            // Mutual match!
-            this.pendingRequests.delete(existingReq.requestId);
-            this.swipedPairs.add(pairId);
+    async bootstrapAiUsers() {
+        const cards = [];
 
+        for (const [index, seed] of AI_BOT_PERSONAS.entries()) {
+            let bot = await User.findOne({ email: seed.email });
+
+            if (!bot) {
+                bot = await User.create({
+                    email: seed.email,
+                    password: `swipe_bot_${index + 1}_default`,
+                    displayName: seed.displayName,
+                    avatarUrl: '',
+                    bio: seed.bio,
+                    level: seed.level,
+                    xp: seed.level * 220,
+                    stats: {
+                        wins: 40 + index * 7,
+                        losses: 22 + index * 4,
+                        draws: 4,
+                        totalBattles: 66 + index * 11,
+                        messageCount: 900 + index * 120,
+                        goodStrikes: 280 + index * 35,
+                        toxicStrikes: 40 + index * 6,
+                        totalDamageDealt: 6500 + index * 700,
+                        totalDamageTaken: 6100 + index * 680,
+                        avgWit: 68 + index,
+                        avgRelevance: 64 + index,
+                        avgToxicity: 18
+                    }
+                });
+            }
+
+            const payload = bot.toJSON();
+            const card = this.toCardPayload(payload, seed.humorStyle, true);
+            cards.push(card);
+            this.aiCardsById.set(card.id, card);
+        }
+
+        logger.debug({ count: cards.length }, 'Swipe AI users ready');
+        return cards;
+    }
+
+    toCardPayload(user, fallbackHumorStyle = 'Adaptive Banter', isAi = false) {
+        const id = String(user.id || user._id || '');
+        return {
+            id,
+            displayName: user.displayName || user.name || 'Unknown',
+            name: user.displayName || user.name || 'Unknown',
+            avatarUrl: user.avatarUrl || '',
+            level: Number.isFinite(Number(user.level)) ? Number(user.level) : 1,
+            bio: user.bio || '',
+            humorStyle: fallbackHumorStyle,
+            isAi
+        };
+    }
+
+    sanitizeRequestUser(user) {
+        return {
+            id: String(user.id || user._id || ''),
+            displayName: user.displayName || user.name || 'Unknown',
+            name: user.displayName || user.name || 'Unknown',
+            avatarUrl: user.avatarUrl || '',
+            level: Number.isFinite(Number(user.level)) ? Number(user.level) : 1
+        };
+    }
+
+    async getCards(userId) {
+        const aiCards = await this.ensureAiUsers();
+        const onlineUsers = PresenceService.getOnlineUsers(userId)
+            .filter((entry) => !this.aiCardsById.has(String(entry.id || entry._id || '')));
+
+        const humanCards = onlineUsers.map((entry) => this.toCardPayload(entry, 'Live Challenger', false));
+        const merged = [...humanCards, ...aiCards]
+            .filter((entry) => String(entry.id) !== String(userId))
+            .filter((entry) => !this.swipedPairs.has(this._getPairId(userId, entry.id)));
+
+        const shuffled = merged.sort(() => Math.random() - 0.5);
+        const deckSize = Math.max(1, Number(config.swipeDeckSize || 20));
+        return shuffled.slice(0, deckSize);
+    }
+
+    async swipeRight(fromUser, targetId, topic) {
+        const cards = await this.ensureAiUsers();
+        const normalizedFrom = this.sanitizeRequestUser(fromUser);
+        const pairId = this._getPairId(normalizedFrom.id, targetId);
+        this.swipedPairs.add(pairId);
+
+        if (this.aiCardsById.has(targetId)) {
+            const aiCard = cards.find((entry) => entry.id === targetId) || this.aiCardsById.get(targetId);
             return {
-                action: 'match',
+                action: 'ai-match',
                 data: {
-                    player1: existingReq.from,
-                    player2: fromUser,
-                    topic: existingReq.topic // Use the original topic
+                    opponent: aiCard,
+                    topic
                 }
             };
         }
 
-        // No mutual match yet, create a request
-        const requestId = `req_${Date.now()}_${uuidv4().substring(0, 8)}`;
+        const targetSocketId = PresenceService.getSocketId(targetId);
+        if (!targetSocketId) {
+            return {
+                action: 'timeout',
+                data: {
+                    targetId,
+                    reason: 'offline'
+                }
+            };
+        }
+
+        const duplicateRequest = [...this.pendingRequests.values()].find(
+            (request) => request.from.id === normalizedFrom.id && request.to.id === targetId
+        );
+
+        if (duplicateRequest) {
+            return {
+                action: 'request',
+                data: {
+                    ...duplicateRequest,
+                    expiresInSec: Math.max(
+                        1,
+                        Math.ceil((duplicateRequest.createdAt + SWIPE_REQUEST_TIMEOUT_MS - Date.now()) / 1000)
+                    )
+                },
+                targetSocketId
+            };
+        }
+
+        const requestId = `req_${Date.now()}_${randomUUID().slice(0, 8)}`;
         const request = {
             requestId,
-            from: fromUser,
-            to: { id: targetId }, // We don't have full target object here, will be looked up by ID if needed
-            topic: topic || 'Random Topic', // Should pick from constants
-            createdAt: Date.now()
+            from: normalizedFrom,
+            to: { id: targetId },
+            topic: topic || 'Random Topic',
+            createdAt: Date.now(),
+            timeoutId: null
         };
+
+        request.timeoutId = setTimeout(() => {
+            this.expireRequest(requestId);
+        }, SWIPE_REQUEST_TIMEOUT_MS);
 
         this.pendingRequests.set(requestId, request);
 
-        // Track swipe so we don't show card again? 
-        // Actually, usually we only block if processed. 
-        // Here we'll treat a right swipe as "pending", so don't add to swipedPairs yet?
-        // FRONTEND REQUIREMENT: "Skip a user. They won't appear in your card deck again this session." -> swipe-left
-        // If I swipe right, I shouldn't see them again either.
-        this.swipedPairs.add(pairId);
-
         return {
             action: 'request',
-            data: request,
+            data: {
+                ...request,
+                expiresInSec: Math.ceil(SWIPE_REQUEST_TIMEOUT_MS / 1000)
+            },
             targetSocketId
         };
     }
 
-    /**
-     * Process a left swipe (skip).
-     */
     swipeLeft(userId, targetId) {
         const pairId = this._getPairId(userId, targetId);
         this.swipedPairs.add(pairId);
     }
 
-    /**
-     * Accept a battle request.
-     */
     acceptBattle(requestId, acceptingUserId) {
         const request = this.pendingRequests.get(requestId);
         if (!request) {
@@ -111,41 +205,96 @@ class SwipeService {
             throw new Error('Not authorized to accept this request');
         }
 
-        this.pendingRequests.delete(requestId);
+        this.clearRequest(requestId);
 
-        // Fetch full accepting user profile?
-        // It's passed in by the caller usually
+        const senderSocketId = PresenceService.getSocketId(request.from.id);
+        if (!senderSocketId) {
+            return {
+                action: 'timeout',
+                data: {
+                    requestId,
+                    targetId: request.from.id,
+                    reason: 'offline'
+                }
+            };
+        }
 
-        return request;
+        return {
+            action: 'match',
+            data: request
+        };
     }
 
-    /**
-     * Decline a battle request.
-     */
     declineBattle(requestId, decliningUserId) {
         const request = this.pendingRequests.get(requestId);
-        if (!request) return null;
-
-        if (request.to.id !== decliningUserId) {
-            // unauthorized
+        if (!request) {
             return null;
         }
 
-        this.pendingRequests.delete(requestId);
+        if (request.to.id !== decliningUserId) {
+            return null;
+        }
+
+        this.clearRequest(requestId);
         return request;
     }
 
-    _getPairId(id1, id2) {
-        return [id1, id2].sort().join(':');
+    expireRequest(requestId) {
+        const request = this.pendingRequests.get(requestId);
+        if (!request) {
+            return;
+        }
+
+        this.clearRequest(requestId);
+
+        const fromSocketId = PresenceService.getSocketId(request.from.id);
+        if (fromSocketId) {
+            const io = require('../socket').getIO();
+            io.to(fromSocketId).emit('battle-request-timeout', {
+                requestId: request.requestId,
+                targetId: request.to.id,
+                reason: 'timeout'
+            });
+        }
     }
 
-    cleanupRequests() {
-        const now = Date.now();
-        for (const [id, req] of this.pendingRequests) {
-            if (now - req.createdAt > 60_000) { // 1 min timeout
-                this.pendingRequests.delete(id);
+    handleUserOffline(userId) {
+        const affected = [...this.pendingRequests.values()].filter(
+            (request) => request.from.id === userId || request.to.id === userId
+        );
+
+        for (const request of affected) {
+            this.clearRequest(request.requestId);
+
+            if (request.to.id === userId) {
+                const senderSocketId = PresenceService.getSocketId(request.from.id);
+                if (senderSocketId) {
+                    const io = require('../socket').getIO();
+                    io.to(senderSocketId).emit('battle-request-timeout', {
+                        requestId: request.requestId,
+                        targetId: request.to.id,
+                        reason: 'offline'
+                    });
+                }
             }
         }
+    }
+
+    clearRequest(requestId) {
+        const request = this.pendingRequests.get(requestId);
+        if (!request) {
+            return;
+        }
+
+        if (request.timeoutId) {
+            clearTimeout(request.timeoutId);
+        }
+
+        this.pendingRequests.delete(requestId);
+    }
+
+    _getPairId(id1, id2) {
+        return [String(id1), String(id2)].sort().join(':');
     }
 }
 

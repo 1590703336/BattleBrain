@@ -1,96 +1,107 @@
 # Battle Engine API
 
-This document details the real-time battle events. Active once `battle-start` is received.
+Real-time battle protocol used after `battle-start`.
 
-## 1. Battle Flow
+## 1. Core Config
 
-The battle is a 3-minute debate. Players exchange messages which are judged by AI for functionality (damage).
+- Duration: `BATTLE_DURATION_MS` (currently 180s)
+- HP: `100` per player
+- Message length: `<= 280`
+- Cooldown: `MESSAGE_COOLDOWN_MS` (currently 3s)
 
-**Configuration:**
-- **Duration:** 180 seconds (3 mins)
-- **HP:** 100 per player
-- **Message Limit:** 280 chars
-- **Cooldown:** 3 seconds between messages
+## 2. Client -> Server
 
----
+| Event | Payload |
+|---|---|
+| `send-message` | `{ battleId: string, text: string }` |
+| `surrender-battle` | `{ battleId: string }` |
 
-## 2. Sending Messages
+## 3. Server -> Client
 
-### Emitters (Client → Server)
+### `rate-limited`
 
-| Event | Payload | Description |
-|---|---|---|
-| `send-message` | `{ battleId: string, text: string }` | Send a debate argument. |
-
-**Validation:**
-- Text must not be empty.
-- Text must be <= 280 chars.
-- Must wait 3s since last message.
-
-### Listeners (Server → Client)
-
-#### `rate-limited`
-Received if you send messages too fast or too long.
-
-**Payload:**
 ```json
 {
-  "reason": "message_cooldown" | "message_too_long",
-  "cooldownRemaining": 1500 // ms
+  "reason": "message_cooldown",
+  "cooldownRemaining": 1700
 }
 ```
 
----
+Or for length violation:
 
-## 3. Battle Events
-
-#### `battle-message`
-Received when ANY player (you or opponent) sends a successfully processed message. Contains AI analysis and updated HP state.
-
-**Payload:**
 ```json
 {
-  "senderId": "u_alice",
-  "message": "Pineapple adds a necessary acidity to the savory cheese!",
+  "reason": "message_too_long"
+}
+```
+
+### `battle-message`
+
+```json
+{
+  "battleId": "battle_1739530_09aa8f2c",
+  "senderId": "67af0...",
+  "message": "Pineapple adds balance to salty cheese.",
   "analysis": {
-    "wit": 8,
-    "relevance": 9,
-    "toxicity": 1,
-    "damage": 25,
-    "strikeType": "good-strike" 
+    "wit": 82,
+    "relevance": 90,
+    "toxicity": 11,
+    "damage": 86,
+    "strikeType": "good",
+    "damageTarget": "opponent"
   },
   "state": {
-    "u_alice": { "hp": 100 },
-    "u_bob": { "hp": 75 }
+    "67af0...": { "hp": 100 },
+    "67af1...": { "hp": 74 }
   }
 }
 ```
 
-**Strike Types:**
-- `neutral`: Normal message, 0 damage.
-- `good-strike`: High Wit + Relevance. Deals damage to opponent.
-- `toxic`: High Toxicity. Deals damage to self (recoil).
+`strikeType` values:
+- `good`
+- `toxic`
+- `neutral`
 
-#### `battle-end`
-Received when the battle finishes (Timeout, Knockout, or Forfeit).
+Scoring and HP rules (percentage-based):
+- `wit`, `relevance`, `toxicity` are `0-100`.
+- `toxic`: when `toxicity >= 60`, damage = `toxicity` and target = sender (`damageTarget: "me"`).
+- `good`: when `wit >= 50` and `relevance >= 50` (and not toxic), damage = `round(wit * 0.55 + relevance * 0.45)` and target = opponent.
+- `neutral`: otherwise, `damage = 0`, `damageTarget = null`.
 
-**Payload:**
+### `battle-end`
+
+Per-player payload:
+
 ```json
 {
-  "winner": "u_alice", // User ID of winner (or null if draw)
-  "reason": "knockout" | "timeout" | "forfeit",
+  "battleId": "battle_1739530_09aa8f2c",
+  "winner": "me",
+  "reason": "hp-zero",
   "finalState": {
-    "u_alice": { "hp": 80, "messagesCount": 5 },
-    "u_bob": { "hp": 0, "messagesCount": 4 }
+    "myHp": 52,
+    "opponentHp": 0,
+    "timer": 0
   },
-  "topic": "...",
-  "duration": 45120 // ms
+  "winnerId": "67af0...",
+  "topic": "Pineapple on pizza is a crime",
+  "duration": 46213,
+  "legacyFinalState": {
+    "67af0...": { "hp": 52, "messagesCount": 6 },
+    "67af1...": { "hp": 0, "messagesCount": 5 }
+  }
 }
 ```
 
----
+`reason` values:
+- `hp-zero`
+- `timeout`
+- `surrender`
 
-## 4. Forfeit
+## 4. Persistence
 
-If a player disconnects (socket connection lost) during a battle, they automatically forfeit.
-The opponent receives `battle-end` with `reason: "forfeit"` and is declared the winner.
+On `battle-end`, backend persists:
+- embedded `records[]` entries in each user document
+- updated aggregate stats (`wins/losses/draws`, strike counts, damage, averages)
+- progression updates (`xp`, `level`)
+
+New writes go to `records` (not legacy `battles`).

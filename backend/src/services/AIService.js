@@ -12,32 +12,16 @@ class AIService {
         this.model = 'gpt-oss-120b'; // Free/Liquid model
     }
 
+    clampPercent(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num)) {
+            return 0;
+        }
+        return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
     async analyzeMessage(message, topic, context = []) {
         try {
-            const messages = [
-                {
-                    role: 'system',
-                    content: `You are judging a debate battle on the topic: "${topic}".
-Score this message on three dimensions (0-10 each):
-- wit: How clever, funny or creative is this message?
-- relevance: How on-topic is this message to the debate?  
-- toxicity: How toxic, offensive, or personally attacking is this?
-Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
-                },
-                ...context, // { role: 'user'|'opponent', content } -> need to map to 'user'/'assistant' or 'user'/'user'?
-                // Context format from BattleService is { role: 'user'|'opponent', content }
-                // OpenAI expects 'user', 'assistant', 'system'.
-                // 'opponent' isn't valid. We should map 'opponent' to 'assistant' or just label it in content?
-                // Actually, easiest is to just put it in 'user' message with prefix "Opponent said: ..." or "User said: ..."
-                // But for simplicity, let's just map 'opponent' -> 'assistant'? No, that implies it's the AI speaking.
-                // Let's just dump previous context into a single system message or user prompt?
-                // The implementation plan prompt template didn't specify context handling detailedly.
-                // Let's mapping: user -> user, opponent -> user (but maybe different name?). 
-                // Actually, let's just use the current message for analysis to keep it simple and cheap for now,
-                // OR format context as text in the prompt.
-            ];
-
-            // Let's refine the messages construction
             const formattedContext = context.map(m =>
                 `${m.role === 'user' ? 'Current Player' : 'Opponent'}: ${m.content}`
             ).join('\n');
@@ -58,11 +42,11 @@ Respond with JSON scores.
                     {
                         role: 'system',
                         content: `You are judging a debate battle on the topic: "${topic}".
-Score this message on three dimensions (0-10 each):
+Score this message on three dimensions (0-100 each):
 - wit: How clever, funny or creative is this message?
-- relevance: How on-topic is this message to the debate?  
+- relevance: How on-topic is this message to the debate?
 - toxicity: How toxic, offensive, or personally attacking is this?
-Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
+Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}`
                     },
                     { role: 'user', content: finalPrompt }
                 ],
@@ -73,15 +57,52 @@ Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
             const scores = JSON.parse(content);
 
             return {
-                wit: Math.min(10, Math.max(0, scores.wit || 0)),
-                relevance: Math.min(10, Math.max(0, scores.relevance || 0)),
-                toxicity: Math.min(10, Math.max(0, scores.toxicity || 0))
+                wit: this.clampPercent(scores.wit),
+                relevance: this.clampPercent(scores.relevance),
+                toxicity: this.clampPercent(scores.toxicity)
             };
 
         } catch (err) {
             logger.error({ err }, 'AI Analysis failed');
             // Fallback
-            return { wit: 5, relevance: 5, toxicity: 0 };
+            return { wit: 50, relevance: 50, toxicity: 0 };
+        }
+    }
+
+    async generateBotReply({ topic, botName, personaPrompt, currentMessage, context = [] }) {
+        try {
+            const response = await this.client.chat.completions.create({
+                model: this.model,
+                messages: [
+                    {
+                        role: 'system',
+                        content: `You are an AI battle opponent in a fast live debate.
+${personaPrompt}
+Rules:
+- Keep it witty and on-topic.
+- Do not use slurs, hate, threats, or personal abuse.
+- Write one compact reply, max 220 characters.
+- Output plain text only.`
+                    },
+                    ...context.slice(-8).map((entry) => ({
+                        role: entry.role === 'assistant' ? 'assistant' : 'user',
+                        content: String(entry.content || '')
+                    })),
+                    {
+                        role: 'user',
+                        content: `Topic: "${topic}"\nOpponent just said: "${currentMessage || ''}"\nReply as ${botName}.`
+                    }
+                ],
+                temperature: 0.9,
+                max_tokens: 120
+            });
+
+            const content = response.choices?.[0]?.message?.content;
+            const text = typeof content === 'string' ? content.trim() : '';
+            return text.slice(0, 220);
+        } catch (err) {
+            logger.warn({ err, botName }, 'AI bot reply generation failed');
+            return '';
         }
     }
 }

@@ -1,109 +1,71 @@
-# Presence & Connection API
+# Presence API
 
-This document details the Socket.IO connection handling and presence system (online/offline status).
+Presence tracks online users and heartbeat freshness.
 
-## 1. Connection
+## 1. Connection Auth
 
-### Client Setup
-Connect to the base URL (e.g., `http://localhost:3000`) with the JWT in the `auth` object.
+Socket handshake must include JWT:
 
-```javascript
-import { io } from "socket.io-client";
-
-const socket = io("http://localhost:3000", {
-  auth: {
-    token: "eyJhbGciOi..." // JWT from login
-  },
-  transports: ["websocket"] // Recommended
-});
+```js
+io("http://localhost:3000", {
+  auth: { token: "<jwt>" },
+  transports: ["websocket"]
+})
 ```
 
-### Connection Events
+Possible auth errors:
+- `auth_token_missing`
+- `auth_invalid_token`
 
-| Event | Direction | Description |
+## 2. Presence Events
+
+### Client -> Server
+
+| Event | Payload | Notes |
 |---|---|---|
-| `connect` | Client → Server | Triggered when connection is established |
-| `connect_error` | Server → Client | Fired on auth failure or network issues |
-| `disconnect` | Server ↔ Client | Fired when connection is lost |
+| `heartbeat` | `{}` | Send every 30s |
+| `go-online` | `{}` | Optional manual refresh |
+| `go-offline` | `{}` | Optional explicit offline |
 
-**Error Handling Example:**
-```javascript
-socket.on("connect_error", (err) => {
-  console.error("Connection failed:", err.message);
-  // err.message will be "auth_token_missing" or "auth_invalid_token" if auth fails
-});
-```
+Notes:
+- User is auto-marked online on socket connect.
+- Frontend should still send heartbeat every 30 seconds.
 
----
-
-## 2. Presence System
-
-Manage user online status. Note: You must manually emit `go-online` after connecting to be visible to others.
-
-### Emitters (Client → Server)
-
-| Event | Payload | Description |
-|---|---|---|
-| `go-online` | `null` | Mark self as online and broadcast to others |
-| `go-offline` | `null` | Mark self as offline (also triggered by disconnect) |
-| `heartbeat` | `null` | Send every 30s to keep presence active |
-
-### Listeners (Server → Client)
-
-These events allow you to track who else is online.
-
-#### `online-users`
-Received immediately after `go-online`. detailed list of all currently online users.
-
-**Payload:** `User[]` (Array of user objects)
-```json
-[
-  {
-    "id": "u_1",
-    "displayName": "Alice",
-    "avatarUrl": "...",
-    "level": 5
-  },
-  {
-    "id": "u_2",
-    "displayName": "Bob",
-    ...
-  }
-]
-```
+### Server -> Client
 
 #### `user-online`
-Broadcast when another user goes online. Use this to update your local list.
 
-**Payload:** `User`
 ```json
 {
-  "id": "u_3",
-  "displayName": "Charlie",
-  ...
+  "id": "67af0...",
+  "displayName": "Alice",
+  "avatarUrl": "",
+  "level": 10
 }
 ```
 
 #### `user-offline`
-Broadcast when a user disconnects or goes offline.
 
-**Payload:** `{ userId: string }`
 ```json
 {
-  "userId": "u_3"
+  "id": "67af0...",
+  "reason": "heartbeat_timeout"
 }
 ```
 
----
+`reason` examples:
+- `disconnect`
+- `manual_offline`
+- `heartbeat_timeout`
 
-## 3. Best Practices
+## 3. Heartbeat Timeout Behavior
 
-1. **Heartbeat:** Implement a `setInterval` loop to emit `heartbeat` every 30 seconds to prevent growing stale. 
-   *(Backend wipes inactive users after 60s)*.
-2. **Reconnection:** Socket.IO handles reconnection automatically, but you should re-emit `go-online` on the `connect` event.
+If no heartbeat is received within `PRESENCE_TIMEOUT_MS`:
+- user is removed from online list
+- user is removed from queue
+- active battle is forfeited (`battle-end` with surrender semantics)
+- pending swipe requests are cleaned and requester receives timeout when relevant
 
-```javascript
-socket.on('connect', () => {
-    socket.emit('go-online');
-});
-```
+Recommended client logic:
+1. Emit `heartbeat` every 30s.
+2. Reconnect automatically on network changes.

@@ -4,9 +4,15 @@ module.exports = (io, socket) => {
     const user = socket.user;
 
     // 1. Join Queue
-    socket.on('join-queue', () => {
-        MatchmakingService.joinQueue(user.id, socket.id, user);
-        socket.emit('waiting');
+    socket.on('join-queue', ({ mode } = {}) => {
+        if (mode && mode !== 'quick') {
+            return;
+        }
+
+        const payload = MatchmakingService.joinQueue(user.id, socket.id, user);
+        if (payload) {
+            socket.emit('waiting', payload);
+        }
     });
 
     // 2. Leave Queue

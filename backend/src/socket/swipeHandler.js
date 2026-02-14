@@ -1,109 +1,153 @@
 const SwipeService = require('../services/SwipeService');
-const BattleService = require('../services/BattleService'); // Will implement next
+const BattleService = require('../services/BattleService');
+const PresenceService = require('../services/PresenceService');
 const { TOPICS } = require('../config/constants');
 const logger = require('../utils/logger');
+
+function randomTopic() {
+    return TOPICS[Math.floor(Math.random() * TOPICS.length)];
+}
 
 module.exports = (io, socket) => {
     const user = socket.user;
 
-    // 1. Get Cards
-    socket.on('get-cards', () => {
+    socket.on('get-cards', async () => {
         try {
-            const cards = SwipeService.getCards(user.id);
-            // Shuffle cards?
-            const shuffled = cards.sort(() => 0.5 - Math.random());
-            socket.emit('online-users', shuffled);
+            const cards = await SwipeService.getCards(user.id);
+            socket.emit('online-users', cards);
         } catch (err) {
-            logger.error({ err }, 'Error getting cards');
+            logger.error({ err, userId: user.id }, 'Failed to load swipe cards');
         }
     });
 
-    // 2. Swipe Right
-    socket.on('swipe-right', ({ targetId }) => {
+    socket.on('swipe-right', async ({ targetId }) => {
+        if (!targetId) {
+            return;
+        }
+
         try {
-            // Pick random topic for the potential battle
-            const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+            const result = await SwipeService.swipeRight(user, targetId, randomTopic());
 
-            const result = SwipeService.swipeRight(user, targetId, topic);
+            if (result.action === 'timeout') {
+                socket.emit('battle-request-timeout', {
+                    targetId,
+                    reason: result.data.reason || 'offline'
+                });
+                return;
+            }
 
-            if (result.action === 'match') {
-                // Mutual match -> Start Battle
-                const { player1, player2, topic } = result.data;
+            if (result.action === 'ai-match') {
+                const waitingPayload = {
+                    queueId: `swipe_ai_${Date.now()}`,
+                    position: 1,
+                    etaSec: 0
+                };
 
-                // This relies on BattleService to be implemented
-                // For now, we'll try to call it, but it might not exist yet if running strictly phase request
-                // But since they are part of same "Phase 3 implementation step" in my head, I should import it.
-                // Wait, BattleService is Phase 4.
-                // Detailed plan said: "Listen: swipe-right → emit battle-request to target OR battle-start if mutual"
-                // I need to be able to start a battle here. 
-                // I will stub BattleService for now or implement it in next step.
-                // Actually, I'll return 'battle-start' payload directly here or import BattleService.
+                socket.emit('waiting', waitingPayload);
 
-                if (BattleService.createBattle) {
-                    const battleData = BattleService.createBattle(player1, player2, topic);
-                    io.to(PresenceService.getSocketId(player1.id)).emit('battle-start', battleData);
-                    io.to(PresenceService.getSocketId(player2.id)).emit('battle-start', battleData);
-                } else {
-                    logger.warn("BattleService not ready, cannot start battle");
+                if (socket.disconnected) {
+                    return;
                 }
 
-            } else if (result.action === 'request') {
-                // Send request to target
+                const battleData = BattleService.createBattle(user, result.data.opponent, result.data.topic);
+                socket.emit('battle-start', battleData);
+                return;
+            }
+
+            if (result.action === 'request') {
                 const { targetSocketId, data } = result;
+
                 io.to(targetSocketId).emit('battle-request', {
                     requestId: data.requestId,
                     from: data.from,
-                    topic: data.topic
+                    topic: data.topic,
+                    expiresInSec: data.expiresInSec
+                });
+
+                socket.emit('waiting', {
+                    queueId: data.requestId,
+                    position: 1,
+                    etaSec: data.expiresInSec
                 });
             }
         } catch (err) {
-            // e.g. user offline
-            logger.warn({ err }, 'Swipe right failed');
+            logger.warn({ err, userId: user.id, targetId }, 'Swipe-right failed');
+            socket.emit('battle-request-timeout', {
+                targetId,
+                reason: 'offline'
+            });
         }
     });
 
-    // 3. Swipe Left
     socket.on('swipe-left', ({ targetId }) => {
+        if (!targetId) {
+            return;
+        }
         SwipeService.swipeLeft(user.id, targetId);
     });
 
-    // 4. Accept Battle
     socket.on('accept-battle', ({ requestId }) => {
+        if (!requestId) {
+            return;
+        }
+
         try {
-            const request = SwipeService.acceptBattle(requestId, user.id);
+            const result = SwipeService.acceptBattle(requestId, user.id);
 
-            // Start Battle
-            const player1 = request.from;
-            const player2 = user;
-
-            if (BattleService.createBattle) {
-                const battleData = BattleService.createBattle(player1, player2, request.topic);
-
-                const s1 = PresenceService.getSocketId(player1.id);
-                const s2 = socket.id;
-
-                if (s1) io.to(s1).emit('battle-start', battleData);
-                io.to(s2).emit('battle-start', battleData);
+            if (result.action === 'timeout') {
+                socket.emit('battle-request-timeout', {
+                    requestId,
+                    targetId: result.data.targetId,
+                    reason: result.data.reason
+                });
+                return;
             }
+
+            const request = result.data;
+            const senderSocketId = PresenceService.getSocketId(request.from.id);
+            if (!senderSocketId) {
+                socket.emit('battle-request-timeout', {
+                    requestId,
+                    targetId: request.from.id,
+                    reason: 'offline'
+                });
+                return;
+            }
+
+            const battleData = BattleService.createBattle(request.from, user, request.topic);
+            io.to(senderSocketId).emit('battle-start', battleData);
+            socket.emit('battle-start', battleData);
         } catch (err) {
-            logger.error({ err }, 'Accept battle failed');
+            logger.error({ err, userId: user.id, requestId }, 'Accept battle failed');
+            socket.emit('battle-request-timeout', {
+                requestId,
+                reason: 'timeout'
+            });
         }
     });
 
-    // 5. Decline Battle
     socket.on('decline-battle', ({ requestId }) => {
-        const request = SwipeService.declineBattle(requestId, user.id);
-        if (request) {
-            const senderSocket = PresenceService.getSocketId(request.from.id);
-            if (senderSocket) {
-                io.to(senderSocket).emit('battle-request-declined', {
-                    requestId,
-                    by: user.id
-                });
-            }
+        if (!requestId) {
+            return;
         }
+
+        const request = SwipeService.declineBattle(requestId, user.id);
+        if (!request) {
+            return;
+        }
+
+        const senderSocketId = PresenceService.getSocketId(request.from.id);
+        if (!senderSocketId) {
+            return;
+        }
+
+        io.to(senderSocketId).emit('battle-request-declined', {
+            requestId,
+            by: user.id
+        });
+    });
+
+    socket.on('disconnect', () => {
+        SwipeService.handleUserOffline(user.id);
     });
 };
-
-// Re-require PresenceService inside just to be safe about circular deps if not wary
-const PresenceService = require('../services/PresenceService');

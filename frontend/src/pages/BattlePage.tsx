@@ -17,7 +17,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useSoundEffect } from '../hooks/useSoundEffect';
 import { useStrikeAnimation } from '../hooks/useStrikeAnimation';
 import { useBattleStore } from '../stores/battleStore';
-import { BattleEndPayload, BattleMessagePayload, BattleStateSnapshot } from '../types/socket';
+import { BattleEndPayload, BattleMessagePayload } from '../types/socket';
 import { MAX_HP } from '../utils/constants';
 
 interface DamageBurst {
@@ -34,9 +34,9 @@ interface PowerState {
 }
 
 const cooldownPreset: Record<keyof PowerState, number> = {
-  meme: 18,
-  pun: 22,
-  dodge: 16,
+  meme: 3,
+  pun: 4,
+  dodge: 3,
 };
 
 export default function BattlePage() {
@@ -88,6 +88,8 @@ export default function BattlePage() {
   const [maxCombo, setMaxCombo] = useState(0);
   const [cooldowns, setCooldowns] = useState<PowerState>({ meme: 0, pun: 0, dodge: 0 });
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
+  const [sending, setSending] = useState(false);
+  const [waitingOpponent, setWaitingOpponent] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -104,9 +106,21 @@ export default function BattlePage() {
   useEffect(() => {
     const onMessage = (payload: BattleMessagePayload) => {
       ingestMessage(payload);
+      setCooldowns((state) => ({
+        meme: Math.max(0, state.meme - 1),
+        pun: Math.max(0, state.pun - 1),
+        dodge: Math.max(0, state.dodge - 1),
+      }));
 
       const { message } = payload;
       playStrike(message.strikeType);
+      if (message.role === 'me') {
+        setSending(false);
+        setWaitingOpponent(true);
+      }
+      if (message.role === 'opponent') {
+        setWaitingOpponent(false);
+      }
 
       if (message.role === 'me') {
         if (message.strikeType === 'good') {
@@ -145,34 +159,36 @@ export default function BattlePage() {
       }
     };
 
-    const onTick = (payload: BattleStateSnapshot) => {
-      setSnapshot(payload);
-    };
-
     const onEnd = (payload: BattleEndPayload) => {
       endBattle(payload);
       saveCurrentResult({ winner: payload.winner });
+      setSending(false);
+      setWaitingOpponent(false);
+      socket.emit('get-cards', {});
     };
 
-    const onRateLimited = (payload: { retryAfterMs: number }) => {
+    const onRateLimited = (payload: { retryAfterMs: number; reason?: string }) => {
+      setSending(false);
+      setWaitingOpponent(false);
+      if (payload.reason === 'message_too_long') {
+        setToast('Message too long. Keep it under 280 characters.');
+        return;
+      }
       setToast(`Cooldown active: retry in ${Math.ceil(payload.retryAfterMs / 1000)}s.`);
     };
 
     socket.on('battle-message', onMessage);
-    socket.on('battle-tick', onTick);
     socket.on('battle-end', onEnd);
     socket.on('rate-limited', onRateLimited);
 
     return () => {
       socket.off('battle-message', onMessage);
-      socket.off('battle-tick', onTick);
       socket.off('battle-end', onEnd);
       socket.off('rate-limited', onRateLimited);
     };
   }, [
     socket,
     ingestMessage,
-    setSnapshot,
     endBattle,
     saveCurrentResult,
     triggerStrike,
@@ -182,6 +198,22 @@ export default function BattlePage() {
     buffs.pun,
     buffs.dodge,
   ]);
+
+  useEffect(() => {
+    if (status !== 'active' || timer <= 0) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setSnapshot({
+        myHp,
+        opponentHp,
+        timer: Math.max(0, timer - 1),
+      });
+    }, 1000);
+
+    return () => window.clearTimeout(timeout);
+  }, [myHp, opponentHp, setSnapshot, status, timer]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -197,18 +229,6 @@ export default function BattlePage() {
     const timeout = window.setTimeout(() => setToast(''), 1600);
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  useEffect(() => {
-    const timerId = window.setInterval(() => {
-      setCooldowns((state) => ({
-        meme: Math.max(0, state.meme - 1),
-        pun: Math.max(0, state.pun - 1),
-        dodge: Math.max(0, state.dodge - 1),
-      }));
-    }, 1000);
-
-    return () => window.clearInterval(timerId);
-  }, []);
 
   useEffect(() => {
     if (status !== 'ended' || endSoundPlayedRef.current) {
@@ -228,6 +248,12 @@ export default function BattlePage() {
       endSoundPlayedRef.current = false;
     }
   }, [status]);
+
+  useEffect(() => {
+    if (status !== 'active') {
+      setWaitingOpponent(false);
+    }
+  }, [status, battleId]);
 
   const activatePower = (name: keyof PowerState) => {
     if (status !== 'active' || cooldowns[name] > 0) {
@@ -263,7 +289,18 @@ export default function BattlePage() {
       battleId,
       text: decorated.slice(0, 280),
     });
+    setSending(true);
+    setWaitingOpponent(false);
     setDraft('');
+  };
+
+  const handleSurrender = () => {
+    if (!battleId || status !== 'active') {
+      return;
+    }
+
+    socket.emit('surrender-battle', { battleId });
+    setToast('Surrender requested...');
   };
 
   const timerLabel = useMemo(() => {
@@ -344,6 +381,29 @@ export default function BattlePage() {
             ) : (
               messages.map((message) => <ChatMessage key={message.id} {...message} />)
             )}
+
+            <AnimatePresence>
+              {waitingOpponent && status === 'active' ? (
+                <motion.div
+                  key="waiting-opponent"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: reducedMotion ? 0.1 : 0.24 }}
+                  className="mx-auto mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/8 px-3 py-1 text-xs tracking-[0.08em] text-cyan-100"
+                >
+                  <span>Waiting opponent reply</span>
+                  {[0, 1, 2].map((dot) => (
+                    <motion.span
+                      key={dot}
+                      animate={{ opacity: reducedMotion ? 1 : [0.35, 1, 0.35], y: reducedMotion ? 0 : [0, -2, 0] }}
+                      transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.12, ease: 'easeInOut' }}
+                      className="h-1.5 w-1.5 rounded-full bg-cyan-200"
+                    />
+                  ))}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </div>
 
           <AnimatePresence>
@@ -375,7 +435,11 @@ export default function BattlePage() {
           <Button type="submit" disabled={status !== 'active' || !draft.trim()} className="md:w-auto">
             Strike
           </Button>
+          <Button type="button" variant="ghost" disabled={status !== 'active'} onClick={handleSurrender} className="md:w-auto">
+            Surrender
+          </Button>
         </form>
+        {sending ? <p className="mt-2 text-xs text-white/60">Analyzing your message...</p> : null}
       </Card>
 
       <PowerUpPanel cooldowns={cooldowns} onActivate={activatePower} />

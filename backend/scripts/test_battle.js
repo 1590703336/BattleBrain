@@ -84,7 +84,7 @@ async function getToken(name, email) {
         await new Promise(resolve => {
             sA.once('battle-message', (msg) => {
                 console.log("✅ Received good message:", msg.analysis.strikeType, "Damage:", msg.analysis.damage);
-                if (msg.analysis.strikeType !== 'good-strike') console.warn("Expected good-strike!");
+                if (msg.analysis.strikeType !== 'good') console.warn("Expected good strike!");
                 resolve();
             });
         });
