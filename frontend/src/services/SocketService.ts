@@ -13,7 +13,7 @@ import {
 import { getStoredToken, getStoredUser } from '../utils/authStorage';
 
 const USE_MOCK_SOCKET = import.meta.env.VITE_USE_MOCK_SOCKET !== 'false';
-const GOOD_STRIKE_THRESHOLD = 50;
+const GOOD_STRIKE_THRESHOLD = 40;
 const TOXIC_STRIKE_THRESHOLD = 60;
 
 type ServerEventName = keyof ServerToClientEvents;
@@ -705,10 +705,10 @@ class MockBattleGateway {
 
   private damageByScores(strike: StrikeType, scores: BattleMessage['scores']) {
     if (strike === 'good') {
-      return Math.round(scores.wit * 0.55 + scores.relevance * 0.45);
+      return Math.round((scores.wit * 0.6 + scores.relevance * 0.4) * 0.35);
     }
     if (strike === 'toxic') {
-      return Math.round(scores.toxicity);
+      return Math.round(scores.toxicity * 0.2);
     }
     return 0;
   }

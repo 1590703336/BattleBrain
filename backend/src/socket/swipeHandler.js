@@ -1,11 +1,24 @@
 const SwipeService = require('../services/SwipeService');
 const BattleService = require('../services/BattleService');
 const PresenceService = require('../services/PresenceService');
-const { TOPICS } = require('../config/constants');
+const AIService = require('../services/AIService');
 const logger = require('../utils/logger');
 
-function randomTopic() {
-    return TOPICS[Math.floor(Math.random() * TOPICS.length)];
+const TOPIC_GENERATION_MIN_WAIT_MS = 900;
+
+function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function generateTopicWithMinimumWait(playerA, playerB) {
+    const [topic] = await Promise.all([
+        AIService.generateBattleTopic({
+            playerA: playerA?.displayName || playerA?.name || 'Player A',
+            playerB: playerB?.displayName || playerB?.name || 'Player B'
+        }),
+        wait(TOPIC_GENERATION_MIN_WAIT_MS)
+    ]);
+    return topic;
 }
 
 module.exports = (io, socket) => {
@@ -26,7 +39,7 @@ module.exports = (io, socket) => {
         }
 
         try {
-            const result = await SwipeService.swipeRight(user, targetId, randomTopic());
+            const result = await SwipeService.swipeRight(user, targetId);
 
             if (result.action === 'timeout') {
                 socket.emit('battle-request-timeout', {
@@ -40,16 +53,18 @@ module.exports = (io, socket) => {
                 const waitingPayload = {
                     queueId: `swipe_ai_${Date.now()}`,
                     position: 1,
-                    etaSec: 0
+                    etaSec: Math.ceil(TOPIC_GENERATION_MIN_WAIT_MS / 1000)
                 };
 
                 socket.emit('waiting', waitingPayload);
+
+                const topic = await generateTopicWithMinimumWait(user, result.data.opponent);
 
                 if (socket.disconnected) {
                     return;
                 }
 
-                const battleData = BattleService.createBattle(user, result.data.opponent, result.data.topic);
+                const battleData = BattleService.createBattle(user, result.data.opponent, topic);
                 socket.emit('battle-start', battleData);
                 return;
             }
@@ -60,7 +75,6 @@ module.exports = (io, socket) => {
                 io.to(targetSocketId).emit('battle-request', {
                     requestId: data.requestId,
                     from: data.from,
-                    topic: data.topic,
                     expiresInSec: data.expiresInSec
                 });
 
@@ -86,7 +100,7 @@ module.exports = (io, socket) => {
         SwipeService.swipeLeft(user.id, targetId);
     });
 
-    socket.on('accept-battle', ({ requestId }) => {
+    socket.on('accept-battle', async ({ requestId }) => {
         if (!requestId) {
             return;
         }
@@ -114,8 +128,26 @@ module.exports = (io, socket) => {
                 return;
             }
 
-            const battleData = BattleService.createBattle(request.from, user, request.topic);
-            io.to(senderSocketId).emit('battle-start', battleData);
+            const topicEtaSec = Math.ceil(TOPIC_GENERATION_MIN_WAIT_MS / 1000);
+            io.to(senderSocketId).emit('waiting', {
+                queueId: requestId,
+                position: 1,
+                etaSec: topicEtaSec
+            });
+            socket.emit('waiting', {
+                queueId: requestId,
+                position: 1,
+                etaSec: topicEtaSec
+            });
+
+            const topic = await generateTopicWithMinimumWait(request.from, user);
+            const requesterStillOnline = PresenceService.getSocketId(request.from.id);
+            if (!requesterStillOnline || socket.disconnected) {
+                return;
+            }
+
+            const battleData = BattleService.createBattle(request.from, user, topic);
+            io.to(requesterStillOnline).emit('battle-start', battleData);
             socket.emit('battle-start', battleData);
         } catch (err) {
             logger.error({ err, userId: user.id, requestId }, 'Accept battle failed');

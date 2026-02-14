@@ -7,7 +7,7 @@ const PresenceService = require('./PresenceService');
 const User = require('../models/User');
 const AI_BOT_PERSONAS = require('../config/aiBots');
 
-const GOOD_STRIKE_THRESHOLD = 50;
+const GOOD_STRIKE_THRESHOLD = 40;
 const TOXIC_STRIKE_THRESHOLD = 60;
 const AI_PERSONA_BY_NAME = new Map(
     AI_BOT_PERSONAS.map((persona) => [String(persona.displayName || '').toLowerCase(), persona])
@@ -137,11 +137,11 @@ class BattleService {
 
         if (analysis.toxicity >= TOXIC_STRIKE_THRESHOLD) {
             strikeType = 'toxic';
-            damage = Math.min(INITIAL_HP, clampScore(analysis.toxicity));
+            damage = Math.min(INITIAL_HP, Math.max(0, Math.round(clampScore(analysis.toxicity) * 0.2)));
             damageTarget = 'me';
             battle.players[senderId].hp = Math.max(0, battle.players[senderId].hp - damage);
         } else if (analysis.wit >= GOOD_STRIKE_THRESHOLD && analysis.relevance >= GOOD_STRIKE_THRESHOLD) {
-            const goodStrikeScore = Math.round(analysis.wit * 0.55 + analysis.relevance * 0.45);
+            const goodStrikeScore = Math.round((analysis.wit * 0.6 + analysis.relevance * 0.4) * 0.35);
             strikeType = 'good';
             damage = Math.min(INITIAL_HP, clampScore(goodStrikeScore));
             damageTarget = 'opponent';

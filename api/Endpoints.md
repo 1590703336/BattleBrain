@@ -734,8 +734,8 @@ socket.on('battle-message', (data) => {
 
 | Type | Condition | Effect |
 |------|-----------|--------|
-| `good` | `wit >= 50` and `relevance >= 50` (and not toxic) | Opponent loses HP by weighted score |
-| `toxic` | `toxicity >= 60` | **Sender** loses HP (self-damage) |
+| `good` | `wit >= 40` and `relevance >= 40` (and not toxic) | Opponent loses HP by weighted score |
+| `toxic` | `toxicity >= 60` | **Sender** loses HP by `round(toxicity * 0.2)` |
 | `neutral` | Everything else | No HP change |
 
 ---

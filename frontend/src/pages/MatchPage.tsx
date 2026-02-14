@@ -51,7 +51,7 @@ export default function MatchPage() {
     const onWaiting = (payload: QueueWaitingPayload) => {
       setPhase('queue');
       setQueueStatus('searching');
-      setWaitingMeta(payload.etaSec, `Queue position ${payload.position}. Negotiating battle slot...`);
+      setWaitingMeta(payload.etaSec, `Queue position ${payload.position}. Matching players and generating topic...`);
     };
 
     const onBattleStart = (payload: BattleStartPayload) => {
@@ -134,9 +134,9 @@ export default function MatchPage() {
     setQueueing();
     setQueueStatus('searching');
     setWaitingMeta(
-      candidate.isAi ? 0 : 12,
+      candidate.isAi ? 2 : 12,
       candidate.isAi
-        ? `Locking on ${candidate.name}. AI challenger is ready.`
+        ? `Locking on ${candidate.name}. Generating battle topic...`
         : `Challenge sent to ${candidate.name}. Waiting for response...`
     );
     socket.emit('swipe-right', { targetId: candidate.id });
@@ -236,7 +236,9 @@ export default function MatchPage() {
               <p className="mt-2 text-sm text-white/75">
                 {incomingRequest.from.displayName || incomingRequest.from.name} wants to battle.
               </p>
-              <p className="mt-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/85">{incomingRequest.topic}</p>
+              <p className="mt-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm text-white/75">
+                Topic will be generated after match lock-in.
+              </p>
 
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <button

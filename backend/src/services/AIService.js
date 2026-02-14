@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const config = require('../config/env');
 const logger = require('../utils/logger');
+const { TOPICS } = require('../config/constants');
 
 class AIService {
     constructor() {
@@ -103,6 +104,42 @@ Rules:
         } catch (err) {
             logger.warn({ err, botName }, 'AI bot reply generation failed');
             return '';
+        }
+    }
+
+    async generateBattleTopic({ playerA = 'Player A', playerB = 'Player B' } = {}) {
+        try {
+            const response = await this.client.chat.completions.create({
+                model: this.model,
+                messages: [
+                    {
+                        role: 'system',
+                        content: `Generate one short meme-style debate topic for a 1v1 battle game.
+Rules:
+- One line only
+- Max 14 words
+- No hate speech, slurs, or protected-class attacks
+- Keep it playful and controversial
+- Output plain text only`
+                    },
+                    {
+                        role: 'user',
+                        content: `Players: ${playerA} vs ${playerB}. Generate the topic now.`
+                    }
+                ],
+                temperature: 1,
+                max_tokens: 60
+            });
+
+            const content = response.choices?.[0]?.message?.content;
+            const topic = typeof content === 'string' ? content.trim().replace(/\s+/g, ' ') : '';
+            if (!topic) {
+                throw new Error('empty_topic');
+            }
+            return topic.slice(0, 120);
+        } catch (err) {
+            logger.warn({ err }, 'AI topic generation failed, using fallback');
+            return TOPICS[Math.floor(Math.random() * TOPICS.length)];
         }
     }
 }

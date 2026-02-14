@@ -90,8 +90,8 @@ Sent when request expires or target is offline.
 #### AI Swipe Match
 
 If target card is AI (`isAi: true`):
-- requester receives `waiting` with `etaSec: 0`
-- backend emits `battle-start` immediately (no artificial delay)
+- requester receives `waiting` while match topic is generated
+- backend emits `battle-start` right after topic generation completes
 
 ## 2. Queue Mode
 
