@@ -21,6 +21,7 @@ interface UnifiedRecord {
     toxicStrikes: number;
   };
   opponentName: string;
+  opponentLevel: number;
 }
 
 function toUnifiedFromStore(item: BattleHistoryItem): UnifiedRecord {
@@ -31,6 +32,7 @@ function toUnifiedFromStore(item: BattleHistoryItem): UnifiedRecord {
     finishedAt: item.finishedAt,
     stats: item.stats,
     opponentName: item.opponent.name,
+    opponentLevel: item.opponent.level,
   };
 }
 
@@ -42,6 +44,7 @@ function toUnifiedFromApi(item: BattleHistoryResponse): UnifiedRecord {
     finishedAt: new Date(item.finishedAt).getTime(),
     stats: item.stats,
     opponentName: item.opponent.name,
+    opponentLevel: item.opponent.level,
   };
 }
 
@@ -140,7 +143,9 @@ export default function ResultPage() {
               <li key={item.id} className="rounded-xl border border-white/12 bg-black/20 px-3 py-2">
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-white/60">
                   <span>{new Date(item.finishedAt).toLocaleString()}</span>
-                  <span>{item.opponentName}</span>
+                  <span>
+                    {item.opponentName} · Lv.{item.opponentLevel}
+                  </span>
                   <span className="uppercase tracking-[0.08em]">{item.winner}</span>
                 </div>
                 <p className="mt-1 text-sm text-white/90">{item.topic}</p>

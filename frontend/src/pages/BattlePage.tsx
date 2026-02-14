@@ -3,7 +3,10 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import ChatMessage from '../components/battle/ChatMessage';
+import ComboMeter from '../components/battle/ComboMeter';
 import HealthBar from '../components/battle/HealthBar';
+import PowerUpPanel from '../components/battle/PowerUpPanel';
+import ThemeBackdrop from '../components/battle/ThemeBackdrop';
 import Badge from '../components/common/Badge';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
@@ -11,6 +14,7 @@ import Input from '../components/common/Input';
 import Toast from '../components/common/Toast';
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
 import { useSocket } from '../hooks/useSocket';
+import { useSoundEffect } from '../hooks/useSoundEffect';
 import { useStrikeAnimation } from '../hooks/useStrikeAnimation';
 import { useBattleStore } from '../stores/battleStore';
 import { BattleEndPayload, BattleMessagePayload, BattleStateSnapshot } from '../types/socket';
@@ -23,11 +27,25 @@ interface DamageBurst {
   tone: 'good' | 'toxic' | 'neutral';
 }
 
+interface PowerState {
+  meme: number;
+  pun: number;
+  dodge: number;
+}
+
+const cooldownPreset: Record<keyof PowerState, number> = {
+  meme: 18,
+  pun: 22,
+  dodge: 16,
+};
+
 export default function BattlePage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const socket = useSocket(true);
   const reducedMotion = useReducedMotionPreference();
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const { playStrike, playVictory, playDefeat, playUiTap, unlockAudio, unlocked } = useSoundEffect(soundEnabled);
 
   const {
     status,
@@ -66,9 +84,14 @@ export default function BattlePage() {
   const [draft, setDraft] = useState('');
   const [damageBursts, setDamageBursts] = useState<DamageBurst[]>([]);
   const [toast, setToast] = useState('');
+  const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
+  const [cooldowns, setCooldowns] = useState<PowerState>({ meme: 0, pun: 0, dodge: 0 });
+  const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const endSoundPlayedRef = useRef(false);
 
   const { triggerStrike } = useStrikeAnimation(arenaRef, reducedMotion);
 
@@ -83,17 +106,42 @@ export default function BattlePage() {
       ingestMessage(payload);
 
       const { message } = payload;
+      playStrike(message.strikeType);
+
+      if (message.role === 'me') {
+        if (message.strikeType === 'good') {
+          setCombo((current) => {
+            const next = current + (buffs.pun ? 2 : 1);
+            setMaxCombo((prev) => Math.max(prev, next));
+            return next;
+          });
+        } else {
+          setCombo(0);
+        }
+
+        if (buffs.meme || buffs.pun) {
+          setBuffs((current) => ({ ...current, meme: false, pun: false }));
+        }
+      }
+
+      if (message.role === 'opponent' && buffs.dodge) {
+        setBuffs((current) => ({ ...current, dodge: false }));
+        setToast('Dodge primed: incoming pressure softened.');
+      }
+
       if (message.damage > 0 && message.damageTarget) {
-        setDamageBursts((current) => [
-          ...current,
-          {
-            id: crypto.randomUUID(),
-            value: message.damage,
-            target: message.damageTarget as 'me' | 'opponent',
-            tone: message.strikeType,
-          },
-        ]);
-        triggerStrike(message.strikeType === 'toxic' ? 'toxic' : 'good');
+        const burst: DamageBurst = {
+          id: crypto.randomUUID(),
+          value: message.damage,
+          target: message.damageTarget,
+          tone: message.strikeType,
+        };
+        setDamageBursts((current) => [...current, burst]);
+        window.setTimeout(
+          () => setDamageBursts((current) => current.filter((item) => item.id !== burst.id)),
+          reducedMotion ? 120 : 620
+        );
+        triggerStrike(message.strikeType);
       }
     };
 
@@ -121,7 +169,19 @@ export default function BattlePage() {
       socket.off('battle-end', onEnd);
       socket.off('rate-limited', onRateLimited);
     };
-  }, [socket, ingestMessage, setSnapshot, endBattle, saveCurrentResult, triggerStrike]);
+  }, [
+    socket,
+    ingestMessage,
+    setSnapshot,
+    endBattle,
+    saveCurrentResult,
+    triggerStrike,
+    playStrike,
+    reducedMotion,
+    buffs.meme,
+    buffs.pun,
+    buffs.dodge,
+  ]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -139,16 +199,56 @@ export default function BattlePage() {
   }, [toast]);
 
   useEffect(() => {
-    if (damageBursts.length === 0) {
+    const timerId = window.setInterval(() => {
+      setCooldowns((state) => ({
+        meme: Math.max(0, state.meme - 1),
+        pun: Math.max(0, state.pun - 1),
+        dodge: Math.max(0, state.dodge - 1),
+      }));
+    }, 1000);
+
+    return () => window.clearInterval(timerId);
+  }, []);
+
+  useEffect(() => {
+    if (status !== 'ended' || endSoundPlayedRef.current) {
+      return;
+    }
+    endSoundPlayedRef.current = true;
+
+    if (myHp > opponentHp) {
+      playVictory();
+    } else {
+      playDefeat();
+    }
+  }, [status, myHp, opponentHp, playVictory, playDefeat]);
+
+  useEffect(() => {
+    if (status === 'active') {
+      endSoundPlayedRef.current = false;
+    }
+  }, [status]);
+
+  const activatePower = (name: keyof PowerState) => {
+    if (status !== 'active' || cooldowns[name] > 0) {
       return;
     }
 
-    const timeout = window.setTimeout(() => {
-      setDamageBursts((current) => current.slice(1));
-    }, reducedMotion ? 120 : 520);
+    void unlockAudio();
+    playUiTap();
+    setCooldowns((state) => ({ ...state, [name]: cooldownPreset[name] }));
+    setBuffs((state) => ({ ...state, [name]: true }));
 
-    return () => window.clearTimeout(timeout);
-  }, [damageBursts, reducedMotion]);
+    if (name === 'meme') {
+      setToast('Meme Attack primed: next line gets amplified.');
+    }
+    if (name === 'pun') {
+      setToast('Pun Attack primed: combo scaling increased.');
+    }
+    if (name === 'dodge') {
+      setToast('Dodge primed: next incoming strike gets deflected.');
+    }
+  };
 
   const handleSend = (e: FormEvent) => {
     e.preventDefault();
@@ -156,9 +256,12 @@ export default function BattlePage() {
       return;
     }
 
+    void unlockAudio();
+    const decorated = `${buffs.meme ? '[Meme x2] ' : ''}${draft.trim()}`;
+
     socket.emit('send-message', {
       battleId,
-      text: draft.trim().slice(0, 280),
+      text: decorated.slice(0, 280),
     });
     setDraft('');
   };
@@ -173,8 +276,15 @@ export default function BattlePage() {
   const endTitle = myHp > opponentHp ? 'You Win' : myHp < opponentHp ? 'You Lose' : 'Draw';
   const endTone = myHp > opponentHp ? 'text-lime-200' : myHp < opponentHp ? 'text-rose-200' : 'text-cyan-100';
 
+  const arenaPressure = Math.max(0, Math.min(100, Math.round((1 - timer / 90) * 100)));
+
   return (
-    <section className="space-y-4 md:space-y-6">
+    <section
+      className="space-y-4 md:space-y-6"
+      onPointerDownCapture={() => {
+        void unlockAudio();
+      }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-[var(--font-display)] text-2xl tracking-[0.08em] md:text-3xl">Battle Arena</h1>
@@ -185,13 +295,41 @@ export default function BattlePage() {
         <div className="flex items-center gap-2">
           <Badge text={`Timer ${timerLabel}`} tone={timer <= 15 ? 'rose' : 'cyan'} />
           <Badge text={status === 'ended' ? 'Ended' : 'Live'} tone={status === 'ended' ? 'rose' : 'lime'} />
+          <button
+            type="button"
+            onClick={() => {
+              setSoundEnabled((prev) => {
+                const next = !prev;
+                if (next) {
+                  void unlockAudio();
+                }
+                return next;
+              });
+            }}
+            className="rounded-full border border-white/20 bg-black/25 px-3 py-1 text-xs text-white/80 transition hover:bg-white/10"
+          >
+            {soundEnabled ? (unlocked ? 'SFX On' : 'SFX Tap To Enable') : 'SFX Off'}
+          </button>
         </div>
       </div>
+
+      <ThemeBackdrop topic={topic} />
 
       <Card className="relative overflow-hidden p-3 md:p-5">
         <p className="font-semibold text-white/85">Topic</p>
         <p className="mt-1 text-sm text-[var(--color-neon-cyan)] md:text-base">{topic}</p>
       </Card>
+
+      <div className="grid gap-3 md:grid-cols-[1.5fr_1fr]">
+        <ComboMeter combo={combo} />
+        <Card>
+          <div className="text-xs uppercase tracking-[0.08em] text-white/60">Arena Pressure</div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full bg-[linear-gradient(90deg,var(--color-neon-cyan),var(--color-neon-rose))]" style={{ width: `${arenaPressure}%` }} />
+          </div>
+          <div className="mt-2 text-sm text-white/75">Pacing indicator (time-based). Peak combo x{maxCombo}</div>
+        </Card>
+      </div>
 
       <Card className="relative overflow-hidden">
         <div ref={arenaRef} className="scanline relative rounded-2xl border border-white/12 p-3 md:p-4">
@@ -239,6 +377,8 @@ export default function BattlePage() {
           </Button>
         </form>
       </Card>
+
+      <PowerUpPanel cooldowns={cooldowns} onActivate={activatePower} />
 
       <Card className="grid gap-3 md:grid-cols-3">
         <Metric label="Messages" value={stats.messageCount} />
