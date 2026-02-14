@@ -1,9 +1,14 @@
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const { ValidationError, NotFoundError } = require('../utils/errors');
+const AI_BOT_PERSONAS = require('../config/aiBots');
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const LEADERBOARD_EXCLUDED_EMAIL_SUFFIXES = ['@test.com'];
+const AI_LEADERBOARD_EMAILS = new Set(
+    AI_BOT_PERSONAS.map((persona) => String(persona.email || '').toLowerCase())
+);
 
 const defaultStats = () => ({
     wins: 0,
@@ -142,6 +147,10 @@ function assertValidObjectId(userId) {
     if (!mongoose.Types.ObjectId.isValid(userId)) {
         throw new ValidationError('Invalid user id');
     }
+}
+
+function isExcludedHumanEmail(email) {
+    return LEADERBOARD_EXCLUDED_EMAIL_SUFFIXES.some((suffix) => email.endsWith(suffix));
 }
 
 class UserService {
@@ -287,7 +296,43 @@ class UserService {
             .slice(0, parsedLimit);
     }
 
+    static async ensureLeaderboardAiUsers() {
+        for (const [index, seed] of AI_BOT_PERSONAS.entries()) {
+            const email = String(seed.email || '').toLowerCase();
+            let user = await User.findOne({ email });
+            if (user) {
+                continue;
+            }
+
+            user = await User.create({
+                email,
+                password: `swipe_bot_${index + 1}_default`,
+                displayName: seed.displayName,
+                avatarUrl: '',
+                bio: seed.bio,
+                level: seed.level,
+                xp: seed.level * 220,
+                stats: {
+                    wins: 40 + index * 7,
+                    losses: 22 + index * 4,
+                    draws: 4,
+                    totalBattles: 66 + index * 11,
+                    messageCount: 900 + index * 120,
+                    goodStrikes: 280 + index * 35,
+                    toxicStrikes: 40 + index * 6,
+                    totalDamageDealt: 6500 + index * 700,
+                    totalDamageTaken: 6100 + index * 680,
+                    avgWit: 68 + index,
+                    avgRelevance: 64 + index,
+                    avgToxicity: 18
+                }
+            });
+        }
+    }
+
     static async getLeaderboard(limit = MAX_LIMIT) {
+        await UserService.ensureLeaderboardAiUsers();
+
         const hasExplicitLimit = typeof limit !== 'undefined' && limit !== null && String(limit).trim() !== '';
         const parsedLimit = hasExplicitLimit ? parseLimit(limit, MAX_LIMIT) : null;
         const users = await User.find({})
@@ -297,16 +342,27 @@ class UserService {
         const ranked = users
             .filter((user) => {
                 const email = String(user.email || '').toLowerCase();
-                return !email.endsWith('@battlebrain.ai');
+                if (AI_LEADERBOARD_EMAILS.has(email)) {
+                    return true;
+                }
+                if (email.endsWith('@battlebrain.ai')) {
+                    return false;
+                }
+                if (isExcludedHumanEmail(email)) {
+                    return false;
+                }
+                return true;
             })
             .map((user) => {
                 const stats = normalizeStats(user.stats);
+                const email = String(user.email || '').toLowerCase();
                 return {
                     id: user._id.toString(),
                     name: user.displayName || 'Unknown',
                     level: Math.max(1, toInt(user.level, 1)),
                     xp: toInt(user.xp, 0),
-                    winRate: stats.winRate
+                    winRate: stats.winRate,
+                    isAi: AI_LEADERBOARD_EMAILS.has(email)
                 };
             })
             .sort((a, b) =>

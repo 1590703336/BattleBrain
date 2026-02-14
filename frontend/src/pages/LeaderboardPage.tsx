@@ -10,6 +10,7 @@ interface LeaderRow {
   level: number;
   xp: number;
   winRate: number;
+  isAi: boolean;
 }
 
 export default function LeaderboardPage() {
@@ -53,6 +54,7 @@ export default function LeaderboardPage() {
                 <tr>
                   <th className="px-4 py-3">Rank</th>
                   <th className="px-4 py-3">Player</th>
+                  <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Level</th>
                   <th className="px-4 py-3">XP</th>
                   <th className="px-4 py-3">Win Rate</th>
@@ -63,6 +65,17 @@ export default function LeaderboardPage() {
                   <tr key={row.id} className="border-t border-white/10 odd:bg-black/20">
                     <td className="px-4 py-3 font-semibold">#{row.rank}</td>
                     <td className="px-4 py-3">{row.name}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] ${
+                          row.isAi
+                            ? 'border border-lime-300/30 bg-lime-300/12 text-lime-100'
+                            : 'border border-cyan-300/30 bg-cyan-300/12 text-cyan-100'
+                        }`}
+                      >
+                        {row.isAi ? 'AI' : 'Human'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">{row.level}</td>
                     <td className="px-4 py-3">{row.xp}</td>
                     <td className="px-4 py-3">{row.winRate}%</td>

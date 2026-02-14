@@ -151,12 +151,14 @@ Persistence note:
 
 Notes:
 - Without `limit`, backend returns the full ranked list.
-- AI seeded bot accounts (`@battlebrain.ai`) are excluded from leaderboard ranking.
+- Leaderboard includes only real users plus the 5 swipe AI bots.
+- Other backend-only bot/system accounts are excluded.
+- Script/test accounts (for example `@test.com`) are excluded.
 
 Response (200):
 ```json
 [
-  { "rank": 1, "id": "u_17", "name": "VoltJester", "level": 22, "xp": 9120, "winRate": 72 }
+  { "rank": 1, "id": "u_17", "name": "VoltJester", "level": 22, "xp": 9120, "winRate": 72, "isAi": false }
 ]
 ```
 
