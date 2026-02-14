@@ -228,6 +228,21 @@ class BattleService {
         }
     }
 
+    surrenderBattle(battleId, userId) {
+        const battle = this.activeBattles.get(battleId);
+        if (!battle) {
+            return false;
+        }
+
+        if (!battle.players[userId]) {
+            throw new Error('User not in this battle');
+        }
+
+        const opponentId = Object.keys(battle.players).find((id) => id !== userId) || null;
+        this.endBattle(battleId, 'forfeit', opponentId);
+        return true;
+    }
+
     scheduleAiReplyIfNeeded(battleId, senderId) {
         const battle = this.activeBattles.get(battleId);
         if (!battle) {

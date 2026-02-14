@@ -105,6 +105,7 @@ export interface ClientToServerEvents {
   'accept-battle': (payload: { requestId: string }) => void;
   'decline-battle': (payload: { requestId: string }) => void;
   'send-message': (payload: { battleId: string; text: string }) => void;
+  'surrender-battle': (payload: { battleId: string }) => void;
   'go-online': (payload?: {}) => void;
   'go-offline': (payload?: {}) => void;
   heartbeat: (payload?: {}) => void;

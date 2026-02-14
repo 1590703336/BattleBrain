@@ -34,9 +34,9 @@ interface PowerState {
 }
 
 const cooldownPreset: Record<keyof PowerState, number> = {
-  meme: 18,
-  pun: 22,
-  dodge: 16,
+  meme: 3,
+  pun: 4,
+  dodge: 3,
 };
 
 export default function BattlePage() {
@@ -88,6 +88,7 @@ export default function BattlePage() {
   const [maxCombo, setMaxCombo] = useState(0);
   const [cooldowns, setCooldowns] = useState<PowerState>({ meme: 0, pun: 0, dodge: 0 });
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
+  const [sending, setSending] = useState(false);
 
   const arenaRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -104,9 +105,17 @@ export default function BattlePage() {
   useEffect(() => {
     const onMessage = (payload: BattleMessagePayload) => {
       ingestMessage(payload);
+      setCooldowns((state) => ({
+        meme: Math.max(0, state.meme - 1),
+        pun: Math.max(0, state.pun - 1),
+        dodge: Math.max(0, state.dodge - 1),
+      }));
 
       const { message } = payload;
       playStrike(message.strikeType);
+      if (message.role === 'me') {
+        setSending(false);
+      }
 
       if (message.role === 'me') {
         if (message.strikeType === 'good') {
@@ -148,9 +157,12 @@ export default function BattlePage() {
     const onEnd = (payload: BattleEndPayload) => {
       endBattle(payload);
       saveCurrentResult({ winner: payload.winner });
+      setSending(false);
+      socket.emit('get-cards', {});
     };
 
     const onRateLimited = (payload: { retryAfterMs: number; reason?: string }) => {
+      setSending(false);
       if (payload.reason === 'message_too_long') {
         setToast('Message too long. Keep it under 280 characters.');
         return;
@@ -212,18 +224,6 @@ export default function BattlePage() {
   }, [toast]);
 
   useEffect(() => {
-    const timerId = window.setInterval(() => {
-      setCooldowns((state) => ({
-        meme: Math.max(0, state.meme - 1),
-        pun: Math.max(0, state.pun - 1),
-        dodge: Math.max(0, state.dodge - 1),
-      }));
-    }, 1000);
-
-    return () => window.clearInterval(timerId);
-  }, []);
-
-  useEffect(() => {
     if (status !== 'ended' || endSoundPlayedRef.current) {
       return;
     }
@@ -276,7 +276,17 @@ export default function BattlePage() {
       battleId,
       text: decorated.slice(0, 280),
     });
+    setSending(true);
     setDraft('');
+  };
+
+  const handleSurrender = () => {
+    if (!battleId || status !== 'active') {
+      return;
+    }
+
+    socket.emit('surrender-battle', { battleId });
+    setToast('Surrender requested...');
   };
 
   const timerLabel = useMemo(() => {
@@ -388,7 +398,11 @@ export default function BattlePage() {
           <Button type="submit" disabled={status !== 'active' || !draft.trim()} className="md:w-auto">
             Strike
           </Button>
+          <Button type="button" variant="ghost" disabled={status !== 'active'} onClick={handleSurrender} className="md:w-auto">
+            Surrender
+          </Button>
         </form>
+        {sending ? <p className="mt-2 text-xs text-white/60">Analyzing your message...</p> : null}
       </Card>
 
       <PowerUpPanel cooldowns={cooldowns} onActivate={activatePower} />

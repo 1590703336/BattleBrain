@@ -14,6 +14,7 @@ Real-time battle protocol used after `battle-start`.
 | Event | Payload |
 |---|---|
 | `send-message` | `{ battleId: string, text: string }` |
+| `surrender-battle` | `{ battleId: string }` |
 
 ## 3. Server -> Client
 

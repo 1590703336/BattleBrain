@@ -40,6 +40,18 @@ module.exports = (io, socket) => {
         }
     });
 
+    socket.on('surrender-battle', ({ battleId }) => {
+        try {
+            if (!battleId) {
+                return;
+            }
+
+            BattleService.surrenderBattle(battleId, user.id);
+        } catch (err) {
+            logger.error({ err, battleId, userId: user.id }, 'Surrender battle failed');
+        }
+    });
+
     // Handle disconnect (forfeit)
     socket.on('disconnect', () => {
         BattleService.handleDisconnect(user.id);

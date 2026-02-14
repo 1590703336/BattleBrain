@@ -78,7 +78,7 @@ function PowerCell({
     <div ref={refEl} className="rounded-2xl border border-white/12 bg-black/25 p-3">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold">{title}</p>
-        <span className="text-xs text-white/65">{cooldown > 0 ? `${cooldown}s` : 'Ready'}</span>
+        <span className="text-xs text-white/65">{cooldown > 0 ? `${cooldown} msg` : 'Ready'}</span>
       </div>
       <p className="mt-1 text-xs text-white/60">{subtitle}</p>
       <Button variant={cooldown > 0 ? 'ghost' : 'primary'} onClick={onClick} disabled={cooldown > 0} className="mt-3 w-full">

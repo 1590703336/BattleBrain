@@ -454,6 +454,22 @@ class MockBattleGateway {
 
     if (event === 'send-message') {
       this.handleSendMessage(payload as Parameters<ClientToServerEvents['send-message']>[0]);
+      return;
+    }
+
+    if (event === 'surrender-battle') {
+      const battleId = (payload as { battleId?: string } | undefined)?.battleId;
+      if (!this.battle || this.battle.finished || !battleId || battleId !== this.battle.battleId) {
+        return;
+      }
+      this.battle.finished = true;
+      this.clearTickTimer();
+      this.emitServerEvent('battle-end', {
+        battleId: this.battle.battleId,
+        winner: 'opponent',
+        reason: 'surrender',
+        finalState: this.snapshot(),
+      });
     }
   }
 
