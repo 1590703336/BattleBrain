@@ -6,7 +6,7 @@
     "scripts": {
         "start": "node src/index.js",
         "dev": "nodemon src/index.js",
-        "lint": "eslint src/"
+        "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src/"
     },
     "dependencies": {
         "async-mutex": "^0.5.0",
