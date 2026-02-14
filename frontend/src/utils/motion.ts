@@ -4,7 +4,7 @@ export const motionTokens = {
     base: 0.22,
     impact: 0.38,
   },
-  ease: [0.22, 0.61, 0.36, 1] as number[],
+  ease: [0.22, 0.61, 0.36, 1] as [number, number, number, number],
 };
 
 export const pageMotion = {

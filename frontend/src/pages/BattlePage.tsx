@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import ChatMessage from '../components/battle/ChatMessage';
 import HealthBar from '../components/battle/HealthBar';
 import Badge from '../components/common/Badge';
@@ -74,18 +75,20 @@ export default function BattlePage() {
     applyDamage,
     tick,
     stats,
-  } = useBattleStore((state) => ({
-    topic: state.topic,
-    myHp: state.myHp,
-    opponentHp: state.opponentHp,
-    messages: state.messages,
-    timer: state.timer,
-    setBattleMeta: state.setBattleMeta,
-    addMessage: state.addMessage,
-    applyDamage: state.applyDamage,
-    tick: state.tick,
-    stats: state.stats,
-  }));
+  } = useBattleStore(
+    useShallow((state) => ({
+      topic: state.topic,
+      myHp: state.myHp,
+      opponentHp: state.opponentHp,
+      messages: state.messages,
+      timer: state.timer,
+      setBattleMeta: state.setBattleMeta,
+      addMessage: state.addMessage,
+      applyDamage: state.applyDamage,
+      tick: state.tick,
+      stats: state.stats,
+    }))
+  );
 
   const [draft, setDraft] = useState('');
   const [damageBursts, setDamageBursts] = useState<DamageBurst[]>([]);

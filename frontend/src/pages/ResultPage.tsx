@@ -1,16 +1,19 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import ResultCard from '../components/battle/ResultCard';
 import { useBattleStore } from '../stores/battleStore';
 
 export default function ResultPage() {
   const navigate = useNavigate();
-  const { myHp, opponentHp, stats, reset } = useBattleStore((state) => ({
-    myHp: state.myHp,
-    opponentHp: state.opponentHp,
-    stats: state.stats,
-    reset: state.reset,
-  }));
+  const { myHp, opponentHp, stats, reset } = useBattleStore(
+    useShallow((state) => ({
+      myHp: state.myHp,
+      opponentHp: state.opponentHp,
+      stats: state.stats,
+      reset: state.reset,
+    }))
+  );
 
   const winner = useMemo<'me' | 'opponent' | 'draw'>(() => {
     if (myHp === opponentHp) {
