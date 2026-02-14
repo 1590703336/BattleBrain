@@ -288,12 +288,17 @@ class UserService {
     }
 
     static async getLeaderboard(limit = MAX_LIMIT) {
-        const parsedLimit = parseLimit(limit, MAX_LIMIT);
+        const hasExplicitLimit = typeof limit !== 'undefined' && limit !== null && String(limit).trim() !== '';
+        const parsedLimit = hasExplicitLimit ? parseLimit(limit, MAX_LIMIT) : null;
         const users = await User.find({})
-            .select('displayName level xp stats')
+            .select('displayName email level xp stats')
             .lean();
 
         const ranked = users
+            .filter((user) => {
+                const email = String(user.email || '').toLowerCase();
+                return !email.endsWith('@battlebrain.ai');
+            })
             .map((user) => {
                 const stats = normalizeStats(user.stats);
                 return {
@@ -309,10 +314,11 @@ class UserService {
                 b.xp - a.xp ||
                 b.winRate - a.winRate ||
                 a.name.localeCompare(b.name)
-            )
-            .slice(0, parsedLimit);
+            );
 
-        return ranked.map((row, index) => ({
+        const visibleRows = parsedLimit ? ranked.slice(0, parsedLimit) : ranked;
+
+        return visibleRows.map((row, index) => ({
             rank: index + 1,
             ...row
         }));

@@ -6,6 +6,7 @@ const AIService = require('./AIService');
 const PresenceService = require('./PresenceService');
 const User = require('../models/User');
 const AI_BOT_PERSONAS = require('../config/aiBots');
+const SwipeService = require('./SwipeService');
 
 const GOOD_STRIKE_THRESHOLD = 40;
 const TOXIC_STRIKE_THRESHOLD = 60;
@@ -405,6 +406,9 @@ class BattleService {
 
         clearTimeout(battle.timerId);
         this.activeBattles.delete(battleId);
+        Object.keys(battle.players).forEach((playerId) => {
+            SwipeService.resetUserMatchState(playerId);
+        });
 
         const winnerId = this.determineWinnerId(battle, explicitWinnerId);
         const endReason = this.mapEndReason(reason);

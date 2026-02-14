@@ -167,6 +167,7 @@ export default function BattlePage() {
       setSending(false);
       setWaitingOpponent(false);
       resetMatchQueue();
+      socket.emit('leave-queue', {});
       socket.emit('get-cards', {});
     };
 
@@ -303,6 +304,7 @@ export default function BattlePage() {
       return;
     }
 
+    socket.emit('leave-queue', {});
     socket.emit('surrender-battle', { battleId });
     setToast('Surrender requested...');
   };

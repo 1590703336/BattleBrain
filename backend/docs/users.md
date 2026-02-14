@@ -147,7 +147,11 @@ Persistence note:
 
 ## 5. Leaderboard
 
-**Endpoint:** `GET /api/leaderboard?limit=100`
+**Endpoint:** `GET /api/leaderboard` (optional `?limit=100`)
+
+Notes:
+- Without `limit`, backend returns the full ranked list.
+- AI seeded bot accounts (`@battlebrain.ai`) are excluded from leaderboard ranking.
 
 Response (200):
 ```json
