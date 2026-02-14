@@ -72,18 +72,29 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
 
     async generateBotReply({ topic, botName, personaPrompt, currentMessage, context = [] }) {
         try {
+            const recentAssistantLines = context
+                .filter((entry) => entry.role === 'assistant')
+                .slice(-4)
+                .map((entry) => String(entry.content || '').trim())
+                .filter(Boolean)
+                .join('\n');
+
             const response = await this.client.chat.completions.create({
                 model: this.model,
                 messages: [
                     {
                         role: 'system',
-                        content: `You are an AI battle opponent in a fast live debate.
+                        content: `You are ${botName}, an aggressive 1v1 debate opponent.
 ${personaPrompt}
 Rules:
-- Keep it witty and on-topic.
-- Do not use slurs, hate, threats, or personal abuse.
-- Write one compact reply, max 220 characters.
-- Output plain text only.`
+- You MUST directly target weaknesses in the opponent's latest line.
+- You MUST explicitly connect your attack to the current topic.
+- Tone should be sharp, mocking, and high-pressure, but not hateful.
+- Do not use slurs, protected-class hate, threats, or sexual violence.
+- Avoid template intros like "Bold take", "Counterpoint loaded", "Nice swing".
+- Vary wording and structure across turns.
+- Write 1-2 compact sentences, max 220 characters.
+- Output plain text only, no quotes, no JSON.`
                     },
                     ...context.slice(-8).map((entry) => ({
                         role: entry.role === 'assistant' ? 'assistant' : 'user',
@@ -91,11 +102,17 @@ Rules:
                     })),
                     {
                         role: 'user',
-                        content: `Topic: "${topic}"\nOpponent just said: "${currentMessage || ''}"\nReply as ${botName}.`
+                        content: `Topic: "${topic}".
+Opponent latest message: "${currentMessage || ''}".
+Recent assistant lines (avoid repeating style/openers):
+${recentAssistantLines || '[none]'}
+
+Now write a fresh aggressive rebuttal that attacks this specific message and this specific topic.`
                     }
                 ],
-                temperature: 0.9,
-                max_tokens: 120
+                temperature: 1.15,
+                top_p: 0.95,
+                max_tokens: 140
             });
 
             const content = response.choices?.[0]?.message?.content;

@@ -21,6 +21,54 @@ function clampScore(value) {
     return Math.max(0, Math.min(100, Math.round(num)));
 }
 
+function toKeywordFragment(text) {
+    const cleaned = String(text || '')
+        .replace(/https?:\/\/\S+/g, ' ')
+        .replace(/[^\w\s]/g, ' ')
+        .trim();
+
+    if (!cleaned) {
+        return 'that take';
+    }
+
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    if (tokens.length <= 4) {
+        return cleaned.toLowerCase();
+    }
+
+    const pivot = Math.max(0, Math.floor(tokens.length / 2) - 2);
+    return tokens.slice(pivot, pivot + 4).join(' ').toLowerCase();
+}
+
+function buildFlexibleFallback(topic, lastMessage) {
+    const fragment = toKeywordFragment(lastMessage);
+    const attackOpeners = [
+        `On "${topic}", your take folds under one question.`,
+        `For "${topic}", that argument has volume but no spine.`,
+        `"${topic}" is not the place for half-built logic like that.`,
+        `On "${topic}", you just handed me free damage.`
+    ];
+
+    const attackMiddles = [
+        `You leaned on "${fragment}", but that is a weak pillar.`,
+        `That "${fragment}" angle collapses the second it is tested.`,
+        `You pushed "${fragment}", but it cannot carry the claim.`,
+        `Your "${fragment}" point sounds bold and proves nothing.`
+    ];
+
+    const attackClosers = [
+        'Come back with an argument, not just noise.',
+        'Try evidence next turn, not confidence cosplay.',
+        'You are shadowboxing while the topic scores you down.',
+        'That line is style without structure.'
+    ];
+
+    const opener = attackOpeners[Math.floor(Math.random() * attackOpeners.length)];
+    const middle = attackMiddles[Math.floor(Math.random() * attackMiddles.length)];
+    const closer = attackClosers[Math.floor(Math.random() * attackClosers.length)];
+    return `${opener} ${middle} ${closer}`.slice(0, 260);
+}
+
 function createDefaultStats() {
     return {
         wins: 0,
@@ -299,18 +347,7 @@ class BattleService {
         const topic = battle.topic || 'this debate';
         const aiPlayer = battle.players[aiPlayerId]?.user;
         const botPersona = AI_PERSONA_BY_NAME.get(String(aiPlayer?.displayName || aiPlayer?.name || '').toLowerCase());
-        const fallbackOpeners = [
-            `Bold take. On "${topic}", your angle still needs backup.`,
-            `You came in loud, but "${topic}" needs sharper logic.`,
-            `On "${topic}", that line had speed but no steering.`,
-            `Nice swing. For "${topic}", that still missed the center.`
-        ];
-
-        const callback = lastMessage
-            ? `Counterpoint: "${lastMessage.slice(0, 48)}..." is not carrying this round.`
-            : 'Counterpoint loaded.';
-
-        const fallbackText = `${fallbackOpeners[Math.floor(Math.random() * fallbackOpeners.length)]} ${callback}`.slice(0, 260);
+        const fallbackText = buildFlexibleFallback(topic, lastMessage);
 
         if (!botPersona?.prompt) {
             return fallbackText;
