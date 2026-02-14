@@ -31,9 +31,11 @@ export default function AppShell({ children }: AppShellProps) {
               Home
             </Link>
             <Link
-              to="/battle/demo"
+              to="/match"
               className={`rounded-full px-3 py-1.5 transition ${
-                location.pathname.startsWith('/battle') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'
+                location.pathname.startsWith('/battle') || location.pathname.startsWith('/match')
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/70 hover:text-white'
               }`}
             >
               Arena

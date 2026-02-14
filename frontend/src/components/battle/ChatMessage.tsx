@@ -4,6 +4,8 @@ import { StrikeType } from '../../types/socket';
 export interface ChatMessageProps {
   role: 'me' | 'opponent' | 'system';
   strikeType: StrikeType;
+  damage: number;
+  damageTarget: 'me' | 'opponent' | null;
   scores: {
     wit: number;
     relevance: number;
@@ -25,7 +27,7 @@ function strikeTone(strikeType: StrikeType) {
   return 'border-cyan-300/25 bg-cyan-200/5';
 }
 
-export default function ChatMessage({ role, strikeType, scores, text, ts }: ChatMessageProps) {
+export default function ChatMessage({ role, strikeType, damage, scores, text, ts }: ChatMessageProps) {
   const align = role === 'me' ? 'items-end' : role === 'system' ? 'items-center' : 'items-start';
 
   return (
@@ -42,6 +44,7 @@ export default function ChatMessage({ role, strikeType, scores, text, ts }: Chat
         <p className="whitespace-pre-wrap break-words leading-relaxed">{text}</p>
         {role !== 'system' ? (
           <div className="mt-2 flex gap-3 text-[11px] text-white/65">
+            <span>Dmg {damage}</span>
             <span>Wit {scores.wit}</span>
             <span>Rel {scores.relevance}</span>
             <span>Tox {scores.toxicity}</span>

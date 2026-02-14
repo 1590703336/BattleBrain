@@ -25,7 +25,7 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={() => navigate('/battle/demo')} className="min-w-40">
+          <Button onClick={() => navigate('/match')} className="min-w-40">
             Start Battle
           </Button>
           <Button variant="ghost" onClick={() => navigate('/result/demo')}>

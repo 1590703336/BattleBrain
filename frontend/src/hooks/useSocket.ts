@@ -8,9 +8,6 @@ export function useSocket(autoConnect = false) {
     }
 
     SocketService.connect();
-    return () => {
-      SocketService.disconnect();
-    };
   }, [autoConnect]);
 
   return SocketService;

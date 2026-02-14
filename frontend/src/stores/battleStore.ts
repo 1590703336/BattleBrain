@@ -1,5 +1,12 @@
 import { create } from 'zustand';
-import { BattleMessage } from '../types/socket';
+import {
+  BattleEndPayload,
+  BattleMessage,
+  BattleMessagePayload,
+  BattleOpponent,
+  BattleStartPayload,
+  BattleStateSnapshot,
+} from '../types/socket';
 import { MAX_HP } from '../utils/constants';
 
 export interface BattleStats {
@@ -17,32 +24,37 @@ export interface BattleHistoryItem {
   winner: 'me' | 'opponent' | 'draw';
   stats: BattleStats;
   finishedAt: number;
+  opponent: BattleOpponent;
 }
 
+type BattleStatus = 'idle' | 'queueing' | 'active' | 'ended';
+
 interface BattleState {
+  status: BattleStatus;
   battleId: string;
   topic: string;
+  opponent: BattleOpponent;
   myHp: number;
   opponentHp: number;
-  messages: BattleMessage[];
   timer: number;
+  messages: BattleMessage[];
   stats: BattleStats;
   history: BattleHistoryItem[];
   resultSaved: boolean;
-  startBattle: (battleId: string, topic: string) => void;
-  setBattleMeta: (battleId: string, topic: string) => void;
-  addMessage: (message: BattleMessage) => void;
-  applyDamage: (target: 'me' | 'opponent', amount: number, strikeType: BattleMessage['strikeType']) => void;
-  saveCurrentResult: (payload?: {
-    battleId?: string;
-    topic?: string;
-    myHp?: number;
-    opponentHp?: number;
-    stats?: BattleStats;
-  }) => void;
-  tick: () => void;
-  reset: () => void;
+  setQueueing: () => void;
+  startBattle: (payload: BattleStartPayload) => void;
+  setSnapshot: (snapshot: BattleStateSnapshot) => void;
+  ingestMessage: (payload: BattleMessagePayload) => void;
+  endBattle: (payload: BattleEndPayload) => void;
+  saveCurrentResult: (payload?: { winner?: 'me' | 'opponent' | 'draw' }) => void;
+  resetCurrent: () => void;
 }
+
+const defaultOpponent: BattleOpponent = {
+  id: 'bot-0',
+  name: 'Unknown',
+  level: 1,
+};
 
 const initialStats = (): BattleStats => ({
   myDamage: 0,
@@ -52,105 +64,122 @@ const initialStats = (): BattleStats => ({
   toxicStrikes: 0,
 });
 
-export const useBattleStore = create<BattleState>((set) => ({
-  battleId: 'demo',
+const baseState = () => ({
+  status: 'idle' as BattleStatus,
+  battleId: '',
   topic: 'Hot takes are loading...',
+  opponent: defaultOpponent,
   myHp: MAX_HP,
   opponentHp: MAX_HP,
-  messages: [],
   timer: 90,
+  messages: [] as BattleMessage[],
   stats: initialStats(),
-  history: [],
   resultSaved: false,
-  startBattle: (battleId, topic) =>
-    set({
-      battleId,
-      topic,
+});
+
+export const useBattleStore = create<BattleState>((set) => ({
+  ...baseState(),
+  history: [],
+  setQueueing: () =>
+    set((state) => ({
+      ...state,
+      ...baseState(),
+      status: 'queueing',
+      history: state.history,
+    })),
+  startBattle: (payload) =>
+    set((state) => ({
+      ...state,
+      status: 'active',
+      battleId: payload.battleId,
+      topic: payload.topic,
+      opponent: payload.opponent,
       myHp: MAX_HP,
       opponentHp: MAX_HP,
+      timer: payload.durationSec,
       messages: [],
-      timer: 90,
       stats: initialStats(),
       resultSaved: false,
-    }),
-  setBattleMeta: (battleId, topic) => set({ battleId, topic }),
-  addMessage: (message) =>
-    set((state) => ({
-      messages: [...state.messages, message],
-      stats: {
-        ...state.stats,
-        messageCount: state.stats.messageCount + 1,
-      },
     })),
-  applyDamage: (target, amount, strikeType) =>
+  setSnapshot: (snapshot) =>
+    set((state) => ({
+      ...state,
+      myHp: snapshot.myHp,
+      opponentHp: snapshot.opponentHp,
+      timer: snapshot.timer,
+    })),
+  ingestMessage: (payload) =>
     set((state) => {
-      const next = {
-        myHp: state.myHp,
-        opponentHp: state.opponentHp,
-        stats: { ...state.stats },
+      const message = payload.message;
+      const nextStats = { ...state.stats };
+
+      if (message.role !== 'system') {
+        nextStats.messageCount += 1;
+      }
+
+      if (message.strikeType === 'good') {
+        nextStats.goodStrikes += 1;
+      }
+
+      if (message.strikeType === 'toxic') {
+        nextStats.toxicStrikes += 1;
+      }
+
+      if (message.damageTarget === 'me') {
+        nextStats.opponentDamage += message.damage;
+      }
+
+      if (message.damageTarget === 'opponent') {
+        nextStats.myDamage += message.damage;
+      }
+
+      return {
+        ...state,
+        messages: [...state.messages, message],
+        stats: nextStats,
+        myHp: payload.snapshot.myHp,
+        opponentHp: payload.snapshot.opponentHp,
+        timer: payload.snapshot.timer,
       };
-
-      if (target === 'me') {
-        next.myHp = Math.max(0, state.myHp - amount);
-        next.stats.opponentDamage += amount;
-      } else {
-        next.opponentHp = Math.max(0, state.opponentHp - amount);
-        next.stats.myDamage += amount;
-      }
-
-      if (strikeType === 'good') {
-        next.stats.goodStrikes += 1;
-      }
-
-      if (strikeType === 'toxic') {
-        next.stats.toxicStrikes += 1;
-      }
-
-      return next;
     }),
+  endBattle: (payload) =>
+    set((state) => ({
+      ...state,
+      status: 'ended',
+      myHp: payload.finalState.myHp,
+      opponentHp: payload.finalState.opponentHp,
+      timer: payload.finalState.timer,
+    })),
   saveCurrentResult: (payload) =>
     set((state) => {
-      if (state.resultSaved) {
+      if (state.resultSaved || !state.battleId) {
         return state;
       }
 
-      const finalMyHp = payload?.myHp ?? state.myHp;
-      const finalOpponentHp = payload?.opponentHp ?? state.opponentHp;
-      const finalStats = payload?.stats ?? state.stats;
-      const finalBattleId = payload?.battleId ?? state.battleId;
-      const finalTopic = payload?.topic ?? state.topic;
-
-      let winner: 'me' | 'opponent' | 'draw' = 'draw';
-      if (finalMyHp > finalOpponentHp) {
-        winner = 'me';
-      } else if (finalMyHp < finalOpponentHp) {
-        winner = 'opponent';
-      }
+      const winner =
+        payload?.winner ??
+        (state.myHp > state.opponentHp ? 'me' : state.myHp < state.opponentHp ? 'opponent' : 'draw');
 
       const record: BattleHistoryItem = {
         id: crypto.randomUUID(),
-        battleId: finalBattleId,
-        topic: finalTopic,
+        battleId: state.battleId,
+        topic: state.topic,
         winner,
-        stats: { ...finalStats },
+        stats: { ...state.stats },
         finishedAt: Date.now(),
+        opponent: state.opponent,
       };
 
       return {
-        history: [record, ...state.history].slice(0, 10),
+        ...state,
+        history: [record, ...state.history].slice(0, 20),
         resultSaved: true,
       };
     }),
-  tick: () => set((state) => ({ timer: Math.max(0, state.timer - 1) })),
-  reset: () =>
-    set({
-      battleId: 'demo',
-      topic: 'Hot takes are loading...',
-      myHp: MAX_HP,
-      opponentHp: MAX_HP,
-      messages: [],
-      timer: 90,
-      stats: initialStats(),
-      resultSaved: false,
-    }),
+  resetCurrent: () =>
+    set((state) => ({
+      ...state,
+      ...baseState(),
+      history: state.history,
+    })),
 }));
