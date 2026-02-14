@@ -65,6 +65,14 @@ export default function AppShell({ children }: AppShellProps) {
               Leaderboard
             </Link>
             <Link
+              to="/result/demo"
+              className={`rounded-full px-3 py-1.5 transition ${
+                location.pathname.startsWith('/result') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'
+              }`}
+            >
+              Results
+            </Link>
+            <Link
               to="/profile"
               className={`rounded-full px-3 py-1.5 transition ${
                 location.pathname.startsWith('/profile') ? 'bg-white/15 text-white' : 'text-white/70 hover:text-white'

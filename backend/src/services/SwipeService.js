@@ -291,6 +291,26 @@ class SwipeService {
         this.pendingRequests.delete(requestId);
     }
 
+    resetUserMatchState(userId) {
+        const normalizedUserId = String(userId || '');
+        if (!normalizedUserId) {
+            return;
+        }
+
+        for (const pairId of [...this.swipedPairs]) {
+            const [left, right] = pairId.split(':');
+            if (left === normalizedUserId || right === normalizedUserId) {
+                this.swipedPairs.delete(pairId);
+            }
+        }
+
+        for (const request of [...this.pendingRequests.values()]) {
+            if (request.from.id === normalizedUserId || request.to.id === normalizedUserId) {
+                this.clearRequest(request.requestId);
+            }
+        }
+    }
+
     _getPairId(id1, id2) {
         return [String(id1), String(id2)].sort().join(':');
     }
