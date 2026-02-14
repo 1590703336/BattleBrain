@@ -9,7 +9,7 @@ const { AuthError } = require('../utils/errors');
 function httpAuth(req, res, next) {
     const header = req.headers.authorization;
     if (!header || !header.startsWith('Bearer ')) {
-        return next(new AuthError('Missing or malformed Authorization header'));
+        return next(new AuthError('Invalid or expired token'));
     }
 
     const token = header.split(' ')[1];

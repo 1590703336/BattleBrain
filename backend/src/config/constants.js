@@ -4,6 +4,7 @@ module.exports = Object.freeze({
     BATTLE_DURATION_MS: 180_000, // 3 minutes
     MAX_MESSAGE_LENGTH: 280,
     MESSAGE_COOLDOWN_MS: 3_000,  // 3 seconds between messages
+    PRESENCE_TIMEOUT_MS: 60_000, // 60s without heartbeat = offline
 
     // Matchmaking
     BOT_MATCH_TIMEOUT_MS: 10_000, // 10s before bot fallback

@@ -1,5 +1,8 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { ApiService } from '../../services/ApiService';
+import SocketService from '../../services/SocketService';
+import { useUserStore } from '../../stores/userStore';
 
 interface AppShellProps {
   children: ReactNode;
@@ -7,6 +10,19 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
   const location = useLocation();
+  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
+  const logout = useUserStore((state) => state.logout);
+
+  const handleLogout = async () => {
+    try {
+      await ApiService.logout();
+    } catch {
+      // ignore network/auth errors during local logout
+    } finally {
+      SocketService.disconnect();
+      logout();
+    }
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[var(--color-bg-ink)] text-[var(--color-text-primary)]">
@@ -56,6 +72,26 @@ export default function AppShell({ children }: AppShellProps) {
             >
               Profile
             </Link>
+            {isAuthenticated ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-full px-3 py-1.5 text-white/70 transition hover:text-white"
+              >
+                Logout
+              </button>
+            ) : (
+              <Link
+                to="/login"
+                className={`rounded-full px-3 py-1.5 transition ${
+                  location.pathname.startsWith('/login') || location.pathname.startsWith('/signup')
+                    ? 'bg-white/15 text-white'
+                    : 'text-white/70 hover:text-white'
+                }`}
+              >
+                Login
+              </Link>
+            )}
           </nav>
         </div>
       </header>

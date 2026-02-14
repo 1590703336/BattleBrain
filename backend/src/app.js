@@ -3,7 +3,10 @@ const cors = require('cors');
 const config = require('./config/env');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
-const AuthService = require('./services/AuthService');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const leaderboardRoutes = require('./routes/leaderboardRoutes');
+const battleRoutes = require('./routes/battleRoutes');
 
 const app = express();
 
@@ -25,27 +28,10 @@ app.get('/health', (_req, res) => {
     });
 });
 
-// --- Auth: Signup ---
-app.post('/api/auth/signup', async (req, res, next) => {
-    try {
-        const { email, password, displayName } = req.body;
-        const result = await AuthService.signup(email, password, displayName);
-        res.status(201).json(result);
-    } catch (err) {
-        next(err);
-    }
-});
-
-// --- Auth: Login ---
-app.post('/api/auth/login', async (req, res, next) => {
-    try {
-        const { email, password } = req.body;
-        const result = await AuthService.login(email, password);
-        res.json(result);
-    } catch (err) {
-        next(err);
-    }
-});
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/battles', battleRoutes);
 
 // --- Centralized error handler (must be last) ---
 app.use(errorHandler);

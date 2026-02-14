@@ -9,6 +9,15 @@ Authentication uses JWT Bearer tokens for HTTP and Socket.IO handshake auth.
 
 ---
 
+## 0. Implemented Endpoints (Current Backend)
+
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+
+---
+
 ## 1. Auth Session Contract (Required)
 
 All successful auth endpoints should return a session payload with:
@@ -105,6 +114,10 @@ Returns full auth session contract (section 1).
 - `400 VALIDATION_ERROR`
 ```json
 { "error": "Password must be at least 6 characters", "code": "VALIDATION_ERROR" }
+```
+- `400 VALIDATION_ERROR`
+```json
+{ "error": "Invalid email format", "code": "VALIDATION_ERROR" }
 ```
 - `409 CONFLICT`
 ```json
@@ -255,6 +268,7 @@ Server should reject missing/invalid token with:
 - Identity/profile: `id`, `email`, `name/displayName`, `avatarUrl`
 - Progression: `level`, `xp`, badges
 - Aggregates: `wins`, `losses`, `draws`, totals, averages
+- Match history records: `records[]` (topic, opponent, stats, winner, timestamps)
 - Timestamps: `createdAt`, `updatedAt`, `lastActiveAt`
 
 ### Frontend temporary only
@@ -271,4 +285,4 @@ Frontend pages depending on this auth/user payload:
 - `frontend/src/pages/ProfilePage.tsx`
 - `frontend/src/pages/LeaderboardPage.tsx`
 - `frontend/src/pages/ResultPage.tsx`
-- `frontend/src/stores/userStore.ts` (currently mock-backed, should switch to `/api/auth/me`)
+- `frontend/src/stores/userStore.ts` (session is hydrated from auth APIs and local token storage)
