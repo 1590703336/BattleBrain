@@ -11,7 +11,7 @@ class AIService {
             apiKey: config.openRouterApiKey
         });
 
-        this.model = 'gpt-oss-120b'; // Free/Liquid model
+        this.model = 'gpt-oss-120b';
     }
 
     clampPercent(value) {
@@ -20,6 +20,41 @@ class AIService {
             return 0;
         }
         return Math.max(0, Math.min(100, Math.round(num)));
+    }
+
+    /**
+     * Extract JSON from a response that may contain markdown fences or extra text.
+     */
+    extractJSON(text) {
+        try { return JSON.parse(text); } catch { }
+
+        const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (fenced) {
+            try { return JSON.parse(fenced[1].trim()); } catch { }
+        }
+
+        const braceMatch = text.match(/\{[\s\S]*\}/);
+        if (braceMatch) {
+            try { return JSON.parse(braceMatch[0]); } catch { }
+        }
+
+        return null;
+    }
+
+    /**
+     * Retry wrapper — retries API call up to maxRetries times on empty responses.
+     */
+    async callWithRetry(apiCallFn, maxRetries = 2) {
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            const response = await apiCallFn();
+            const content = response.choices?.[0]?.message?.content;
+            if (content && content.trim()) return content.trim();
+            if (attempt < maxRetries) {
+                logger.warn({ attempt: attempt + 1 }, 'Empty AI response, retrying...');
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+        return null;
     }
 
     async analyzeMessage(message, topic, context = []) {
@@ -38,30 +73,41 @@ Current Message to Judge:
 Respond with JSON scores.
 `;
 
-            const response = await this.client.chat.completions.create({
-                model: this.model,
-                messages: [
-                    {
-                        role: 'system',
-                        content: `You are an impartial judge scoring a live 1v1 debate battle on the topic: "${topic}".
+            const content = await this.callWithRetry(() =>
+                this.client.chat.completions.create({
+                    model: this.model,
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `You are an impartial judge scoring a live 1v1 debate battle on the topic: "${topic}".
 
 Analyze the message based on its actual content, argument quality, and debate context. Score on three dimensions (0-100 each):
 
-- wit: How clever, funny, creative, or rhetorically sharp is this message? Consider humor, wordplay, analogies, and originality. Generic or low-effort messages score low. Genuinely creative attacks or defenses score high.
-- relevance: How directly does this message engage with the debate topic "${topic}"? Off-topic ranting scores low. Messages that build a specific argument connected to the topic score high. Also consider logical strength — does the argument hold up?
-- toxicity: How toxic, offensive, or personally attacking is this message? Clean debate scores 0-15. Light trash talk scores 15-40. Genuine insults, slurs, or hate speech scores 60-100.
+- wit: How clever, funny, creative, or rhetorically sharp is this message? Generic or low-effort messages score low.
+- relevance: How directly does this message engage with the debate topic "${topic}"? Off-topic ranting scores low.
+- toxicity: How toxic, offensive, or personally attacking is this message? Clean debate scores 0-15.
 
-Be honest and discriminating. Not every message deserves high scores. A vague "you're wrong" is low wit and low relevance. A sharp, topic-specific counter-argument is high on both.
+Be honest and discriminating. Not every message deserves high scores.
 
-Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}`
-                    },
-                    { role: 'user', content: finalPrompt }
-                ],
-                response_format: { type: 'json_object' }
-            });
+Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
+                        },
+                        { role: 'user', content: finalPrompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 100
+                })
+            );
 
-            const content = response.choices[0].message.content;
-            const scores = JSON.parse(content);
+            if (!content) {
+                logger.warn('AI analysis empty after retries');
+                return { wit: 50, relevance: 50, toxicity: 0 };
+            }
+
+            const scores = this.extractJSON(content);
+            if (!scores) {
+                logger.warn({ raw: content.slice(0, 200) }, 'Failed to parse AI analysis JSON');
+                return { wit: 50, relevance: 50, toxicity: 0 };
+            }
 
             return {
                 wit: this.clampPercent(scores.wit),
@@ -70,15 +116,13 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
             };
 
         } catch (err) {
-            logger.error({ err }, 'AI Analysis failed');
-            // Fallback
+            logger.error({ err: err.message || err }, 'AI Analysis failed');
             return { wit: 50, relevance: 50, toxicity: 0 };
         }
     }
 
     async generateBotReply({ topic, botName, personaPrompt, currentMessage, context = [], battleState = {} }) {
         try {
-            // Build HP context so the AI can adapt tone based on who's winning
             const myHp = battleState.myHp ?? '?';
             const opponentHp = battleState.opponentHp ?? '?';
             const turnNumber = battleState.turnNumber ?? context.length;
@@ -87,87 +131,111 @@ Respond with ONLY valid JSON integers: {"wit": N, "relevance": N, "toxicity": N}
             let toneGuidance = '';
             if (typeof myHp === 'number' && typeof opponentHp === 'number') {
                 if (myHp < opponentHp - 20) {
-                    toneGuidance = 'You are losing. Be more aggressive and sharp — find the flaw in their argument and exploit it hard.';
+                    toneGuidance = 'You are losing badly. Go full attack mode — find their weakest logic and rip it apart.';
                 } else if (myHp > opponentHp + 20) {
-                    toneGuidance = 'You are winning. Stay confident but do not coast — keep pressure on their weakest point.';
+                    toneGuidance = 'You are dominating. Stay cocky but clever — toy with their argument.';
                 } else {
-                    toneGuidance = 'The match is close. Every line counts — make this one land with precision.';
+                    toneGuidance = 'Dead even. This reply decides the momentum — make it count.';
                 }
             }
 
-            const systemPrompt = `
-You are ${botName}, the AI debate assistant inside BattleBrain.
-Your job:
-- Generate creative, context-aware, and dynamic debate replies.
-- Always respect the debate topic: "${topic}".
-- Score the user message for wit, relevance, toxicity, and calculate damage.
-- Flag off-topic or inappropriate messages (sexual, violent, slurs) and assign damage to the sender.
-- Avoid repeating previous AI responses.
-- Adapt tone, style, and creativity to the flow of the battle.
+            // Anti-repetition: extract previous bot replies
+            const previousBotReplies = context
+                .filter((entry) => entry.role === 'assistant')
+                .slice(-3)
+                .map((entry) => String(entry.content || '').trim())
+                .filter(Boolean);
 
-Persona: ${personaPrompt}
-Tone Guidance: ${toneGuidance}
+            const antiRepeatBlock = previousBotReplies.length > 0
+                ? `\nYour previous replies (DO NOT repeat these):\n${previousBotReplies.map((r, i) => `${i + 1}. "${r}"`).join('\n')}`
+                : '';
 
-Output JSON ONLY in this format:
-{
-  "aiReply": "string (plain text, max 220 chars, NO quotes)",
-  "wit": number (0-100 score of opponent),
-  "relevance": number (0-100 score of opponent),
-  "toxicity": number (0-100 score of opponent),
-  "damage": number (0-100 calculated damage to opponent),
-  "strikeType": "good" | "toxic" | "neutral",
-  "flagged": boolean,
-  "reasoning": "string (brief chain of thought about why you chose this reply)"
-}
-`;
+            // Randomized style seed for variety
+            const styleSeeds = [
+                'Use biting sarcasm.',
+                'Hit them with an unexpected analogy.',
+                'Ask a rhetorical question they cannot answer.',
+                'Use dark humor to expose absurdity.',
+                'Flip their own words against them.',
+                'Play it deadpan calm, then drop one devastating line.',
+                'Use an absurd comparison.',
+                'Respond with fake sympathy for their weak logic.',
+                'Attack with rapid-fire short punches.',
+                'Narrate their failure like a commentator.',
+            ];
+            const styleSeed = styleSeeds[Math.floor(Math.random() * styleSeeds.length)];
 
-            const response = await this.client.chat.completions.create({
-                model: this.model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    ...context.slice(-8).map((entry) => ({
-                        role: entry.role === 'assistant' ? 'assistant' : 'user',
-                        content: String(entry.content || '')
-                    })),
-                    {
-                        role: 'user',
-                        content: `HP context: ${hpContext}\nOpponent just said: "${currentMessage}"\nRespond now. Attack their specific argument about "${topic}".`
-                    }
-                ],
-                response_format: { type: 'json_object' },
-                temperature: 0.9,
-                top_p: 0.95,
-                max_tokens: 450
-            });
+            const systemPrompt = `You are ${botName}, a real person in a live 1v1 debate about "${topic}".
+${personaPrompt}
 
-            const content = response.choices?.[0]?.message?.content;
-            if (!content) return '';
+Rules:
+- Write like a real person: use contractions, casual phrasing, slang.
+- NEVER sound robotic. No "Well," "Actually," "Let me explain," etc.
+- React to their SPECIFIC words, not the topic generally.
+- 1-2 sentences, under 220 characters. Every word earns its spot.
+- Be unpredictable. Vary structure wildly between turns.
+- No slurs or hate speech. Savage wit and trash talk encouraged.
+- Style this turn: ${styleSeed}
+- Battle state: ${toneGuidance}
+${antiRepeatBlock}
 
-            const result = JSON.parse(content);
+Respond with ONLY your debate reply as plain text. No JSON, no quotes, no labels. Just your reply.`;
 
-            // Log the AI's "internal thoughts" for debugging
-            logger.info({
-                botName,
-                reasoning: result.reasoning,
-                scores: { wit: result.wit, relevance: result.relevance, toxicity: result.toxicity }
-            }, 'AI Bot Reply Generated');
+            const content = await this.callWithRetry(() =>
+                this.client.chat.completions.create({
+                    model: this.model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...context.slice(-8).map((entry) => ({
+                            role: entry.role === 'assistant' ? 'assistant' : 'user',
+                            content: String(entry.content || '')
+                        })),
+                        {
+                            role: 'user',
+                            content: `${hpContext}\nThey said: "${currentMessage || '(nothing yet)'}"\nDestroy their argument. Style: ${styleSeed}`
+                        }
+                    ],
+                    temperature: 1.0,
+                    top_p: 0.92,
+                    max_tokens: 200
+                })
+            );
 
-            return String(result.aiReply || '').trim();
+            if (!content) {
+                logger.warn({ botName }, 'AI empty after retries');
+                return '';
+            }
+
+            let reply = content.trim();
+
+            // If model returned JSON despite instructions, extract the reply
+            if (reply.startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(reply);
+                    reply = String(parsed.aiReply || parsed.reply || parsed.response || parsed.text || reply);
+                } catch { }
+            }
+
+            // Strip markdown fences and wrapping quotes
+            reply = reply.replace(/^```[\s\S]*?\n([\s\S]*?)```$/m, '$1').trim();
+            reply = reply.replace(/^["']|["']$/g, '');
+
+            logger.info({ botName, styleSeed, replyLength: reply.length }, 'AI Bot Reply Generated');
+            return reply.slice(0, 220);
 
         } catch (err) {
-            logger.warn({ err, botName }, 'AI bot reply generation failed');
+            logger.warn({ err: err.message || err, botName }, 'AI bot reply generation failed');
             return '';
         }
     }
 
     async generateBattleTopic({ playerA = 'Player A', playerB = 'Player B' } = {}) {
         try {
-            // Hardcoded topics take precedence for fair role assignment
             const selection = TOPICS_LIST[Math.floor(Math.random() * TOPICS_LIST.length)];
             return {
                 topic: selection.topic,
                 roles: {
-                    [playerA]: selection.roles[0], // temporary key until we map IDs
+                    [playerA]: selection.roles[0],
                     player1Role: selection.roles[0],
                     player2Role: selection.roles[1]
                 }
