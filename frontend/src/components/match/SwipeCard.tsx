@@ -40,15 +40,31 @@ export default function SwipeCard({ candidate, index, onSwipe }: SwipeCardProps)
             <h3 className="font-[var(--font-display)] text-2xl tracking-[0.08em]">{candidate.name}</h3>
             <p className="text-sm text-white/65">Level {candidate.level}</p>
           </div>
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-2">
             <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs">{candidate.humorStyle}</span>
-            <span className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] ${candidate.isAi ? 'border border-lime-300/30 bg-lime-300/12 text-lime-100' : 'border border-white/20 bg-white/10 text-white/70'}`}>
-              {candidate.isAi ? 'AI Agent' : 'Player'}
+            <span
+              className={`relative overflow-hidden rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${candidate.isAi
+                ? 'border-lime-300/70 bg-lime-300/20 text-lime-50 shadow-[0_0_18px_rgba(147,255,102,0.35)]'
+                : 'border-cyan-300/80 bg-cyan-300/22 text-cyan-50 shadow-[0_0_18px_rgba(46,245,255,0.35)]'
+                }`}
+            >
+              <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(130deg,transparent,rgba(255,255,255,0.18),transparent)]" />
+              <span className="relative">{candidate.isAi ? 'AI AGENT' : 'HUMAN'}</span>
             </span>
           </div>
         </div>
 
-        <p className="mt-5 rounded-2xl border border-white/12 bg-black/20 p-4 text-sm leading-relaxed text-white/80">{candidate.bio}</p>
+        {!candidate.isAi ? (
+          <div className="mt-4 rounded-xl border border-cyan-300/35 bg-cyan-300/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100">
+            Priority Queue Candidate
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-lime-300/30 bg-lime-300/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-lime-100">
+            AI Fallback Opponent
+          </div>
+        )}
+
+        <p className="mt-4 rounded-2xl border border-white/12 bg-black/20 p-4 text-sm leading-relaxed text-white/80">{candidate.bio}</p>
 
         <div className="mt-5 grid grid-cols-2 gap-3 text-xs uppercase tracking-[0.08em]">
           <div className="rounded-xl border border-rose-300/25 bg-rose-300/10 px-3 py-2 text-rose-100">Swipe Left Skip</div>

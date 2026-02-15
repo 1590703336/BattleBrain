@@ -73,6 +73,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+function buildMockAssistReply(draft: string) {
+  if (draft.trim().length > 0) {
+    return `Keep your core point: ${draft.trim().slice(0, 120)}. Now sharpen it with one concrete example and challenge their assumption directly.`;
+  }
+  return 'Your claim sounds broad. Narrow it: name one concrete benefit, one tradeoff, and ask why their side handles those better.';
+}
+
 export const ApiService = {
   getLeaderboard: async () => {
     return request('/api/leaderboard');
@@ -96,4 +103,13 @@ export const ApiService = {
     }),
   getMe: () => request<{ user: UserProfile }>('/api/auth/me'),
   logout: () => request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' }),
+  getBattleAssist: (battleId: string, draft = '') => {
+    if (useMockApi) {
+      return Promise.resolve({ reply: buildMockAssistReply(draft).slice(0, 220) });
+    }
+    return request<{ reply: string }>(`/api/battles/${battleId}/assist`, {
+      method: 'POST',
+      body: JSON.stringify({ draft }),
+    });
+  },
 };

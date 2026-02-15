@@ -103,19 +103,27 @@ class SwipeService {
         };
     }
 
+    shuffleCards(cards) {
+        return [...cards].sort(() => Math.random() - 0.5);
+    }
+
     async getCards(userId) {
         const aiCards = await this.ensureAiUsers();
         const onlineUsers = PresenceService.getOnlineUsers(userId)
             .filter((entry) => !this.aiCardsById.has(String(entry.id || entry._id || '')));
 
         const humanCards = onlineUsers.map((entry) => this.toCardPayload(entry, 'Live Challenger', false));
-        const merged = [...humanCards, ...aiCards]
+        const availableHumans = humanCards
+            .filter((entry) => String(entry.id) !== String(userId))
+            .filter((entry) => !this.swipedPairs.has(this._getPairId(userId, entry.id)));
+        const availableAi = aiCards
             .filter((entry) => String(entry.id) !== String(userId))
             .filter((entry) => !this.swipedPairs.has(this._getPairId(userId, entry.id)));
 
-        const shuffled = merged.sort(() => Math.random() - 0.5);
+        // Queue/swipe ordering rule: show humans first, AI agents after.
+        const prioritized = [...this.shuffleCards(availableHumans), ...this.shuffleCards(availableAi)];
         const deckSize = Math.max(1, Number(config.swipeDeckSize || 20));
-        return shuffled.slice(0, deckSize);
+        return prioritized.slice(0, deckSize);
     }
 
     async swipeRight(fromUser, targetId) {

@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import ChatMessage from '../components/battle/ChatMessage';
+import DebateCopilot from '../components/battle/DebateCopilot';
 import HealthBar from '../components/battle/HealthBar';
 import PowerUpPanel from '../components/battle/PowerUpPanel';
 import ThemeBackdrop from '../components/battle/ThemeBackdrop';
@@ -12,13 +13,14 @@ import Card from '../components/common/Card';
 import Input from '../components/common/Input';
 import Toast from '../components/common/Toast';
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
+import { ApiService } from '../services/ApiService';
 import { useSocket } from '../hooks/useSocket';
 import { useSoundEffect } from '../hooks/useSoundEffect';
 import { useStrikeAnimation } from '../hooks/useStrikeAnimation';
 import { useBattleStore } from '../stores/battleStore';
 import { useMatchStore } from '../stores/matchStore';
 import { BattleEndPayload, BattleMessagePayload } from '../types/socket';
-import { MAX_HP } from '../utils/constants';
+import { MAX_HP, MESSAGE_COOLDOWN_MS } from '../utils/constants';
 
 interface DamageBurst {
   id: string;
@@ -90,8 +92,11 @@ export default function BattlePage() {
   const [toast, setToast] = useState('');
   const [cooldowns, setCooldowns] = useState<PowerState>({ meme: 0, pun: 0, dodge: 0 });
   const [buffs, setBuffs] = useState<{ meme: boolean; pun: boolean; dodge: boolean }>({ meme: false, pun: false, dodge: false });
+  const [assistantReply, setAssistantReply] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [waitingOpponent, setWaitingOpponent] = useState(false);
+  const [messageCooldownUntil, setMessageCooldownUntil] = useState(0);
   const [resultWinner, setResultWinner] = useState<'me' | 'opponent' | 'draw' | null>(null);
   const [didRequestSurrender, setDidRequestSurrender] = useState(false);
 
@@ -101,6 +106,9 @@ export default function BattlePage() {
 
   const { triggerStrike } = useStrikeAnimation(arenaRef, reducedMotion);
   const resetMatchQueue = useMatchStore((state) => state.reset);
+  const messageCooldownRemainingMs = Math.max(0, messageCooldownUntil - Date.now());
+  const isMessageCoolingDown = messageCooldownRemainingMs > 0;
+  const messageCooldownSeconds = Math.ceil(messageCooldownRemainingMs / 1000);
 
   useEffect(() => {
     if (status === 'idle' || status === 'queueing' || !battleId || battleId !== id) {
@@ -159,6 +167,8 @@ export default function BattlePage() {
       setResultWinner(resolvedWinner);
       setSending(false);
       setWaitingOpponent(false);
+      setMessageCooldownUntil(0);
+      setAssistantLoading(false);
       setDidRequestSurrender(false);
       resetMatchQueue();
       socket.emit('leave-queue', {});
@@ -168,6 +178,7 @@ export default function BattlePage() {
     const onRateLimited = (payload: { retryAfterMs: number; reason?: string }) => {
       setSending(false);
       setWaitingOpponent(false);
+      setMessageCooldownUntil((current) => Math.max(current, Date.now() + Math.max(0, payload.retryAfterMs || 0)));
       if (payload.reason === 'message_too_long') {
         setToast('Message too long. Keep it under 280 characters.');
         return;
@@ -249,12 +260,15 @@ export default function BattlePage() {
       endSoundPlayedRef.current = false;
       setResultWinner(null);
       setDidRequestSurrender(false);
+      setAssistantReply('');
     }
   }, [status]);
 
   useEffect(() => {
     if (status !== 'active') {
       setWaitingOpponent(false);
+      setMessageCooldownUntil(0);
+      setAssistantLoading(false);
     }
   }, [status, battleId]);
 
@@ -284,10 +298,15 @@ export default function BattlePage() {
     if (!draft.trim() || !battleId || status !== 'active') {
       return;
     }
+    if (Date.now() < messageCooldownUntil) {
+      setToast(`Cooldown active: retry in ${messageCooldownSeconds}s.`);
+      return;
+    }
 
     void unlockAudio();
     const decorated = `${buffs.meme ? '[Meme x2] ' : ''}${draft.trim()}`;
 
+    setMessageCooldownUntil(Date.now() + MESSAGE_COOLDOWN_MS);
     socket.emit('send-message', {
       battleId,
       text: decorated.slice(0, 280),
@@ -295,6 +314,32 @@ export default function BattlePage() {
     setSending(true);
     setWaitingOpponent(false);
     setDraft('');
+    setAssistantReply('');
+  };
+
+  const handleGenerateAssist = async () => {
+    if (!battleId || status !== 'active' || assistantLoading) {
+      return;
+    }
+
+    void unlockAudio();
+    playUiTap();
+    setAssistantLoading(true);
+    try {
+      const payload = await ApiService.getBattleAssist(battleId, draft.trim());
+      const nextReply = String(payload.reply || '').trim();
+      if (!nextReply) {
+        setToast('AI assistant is recharging. Try again.');
+        return;
+      }
+      setAssistantReply(nextReply);
+      setDraft(nextReply);
+      setToast('AI assistant drafted your next rebuttal.');
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : 'AI assistant unavailable.');
+    } finally {
+      setAssistantLoading(false);
+    }
   };
 
   const handleSurrender = () => {
@@ -381,35 +426,44 @@ export default function BattlePage() {
             <HealthBar value={opponentHp} max={MAX_HP} state="opponent" />
           </div>
 
-          <div ref={scrollRef} className="mt-4 h-[42vh] space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3 md:h-[46vh]">
-            {messages.length === 0 ? (
-              <p className="text-center text-sm text-white/45">Battle started. Fire your first line.</p>
-            ) : (
-              messages.map((message) => <ChatMessage key={message.id} {...message} />)
-            )}
+          <div className="mt-4 grid gap-3 lg:grid-cols-[220px_1fr]">
+            <DebateCopilot
+              disabled={status !== 'active'}
+              loading={assistantLoading}
+              suggestion={assistantReply}
+              onGenerate={handleGenerateAssist}
+            />
 
-            <AnimatePresence>
-              {waitingOpponent && status === 'active' ? (
-                <motion.div
-                  key="waiting-opponent"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 6 }}
-                  transition={{ duration: reducedMotion ? 0.1 : 0.24 }}
-                  className="mx-auto mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/8 px-3 py-1 text-xs tracking-[0.08em] text-cyan-100"
-                >
-                  <span>Waiting opponent reply</span>
-                  {[0, 1, 2].map((dot) => (
-                    <motion.span
-                      key={dot}
-                      animate={{ opacity: reducedMotion ? 1 : [0.35, 1, 0.35], y: reducedMotion ? 0 : [0, -2, 0] }}
-                      transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.12, ease: 'easeInOut' }}
-                      className="h-1.5 w-1.5 rounded-full bg-cyan-200"
-                    />
-                  ))}
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
+            <div ref={scrollRef} className="h-[42vh] space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3 md:h-[46vh]">
+              {messages.length === 0 ? (
+                <p className="text-center text-sm text-white/45">Battle started. Fire your first line.</p>
+              ) : (
+                messages.map((message) => <ChatMessage key={message.id} {...message} />)
+              )}
+
+              <AnimatePresence>
+                {waitingOpponent && status === 'active' ? (
+                  <motion.div
+                    key="waiting-opponent"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 6 }}
+                    transition={{ duration: reducedMotion ? 0.1 : 0.24 }}
+                    className="mx-auto mt-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/30 bg-cyan-300/8 px-3 py-1 text-xs tracking-[0.08em] text-cyan-100"
+                  >
+                    <span>Waiting opponent reply</span>
+                    {[0, 1, 2].map((dot) => (
+                      <motion.span
+                        key={dot}
+                        animate={{ opacity: reducedMotion ? 1 : [0.35, 1, 0.35], y: reducedMotion ? 0 : [0, -2, 0] }}
+                        transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.12, ease: 'easeInOut' }}
+                        className="h-1.5 w-1.5 rounded-full bg-cyan-200"
+                      />
+                    ))}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
           </div>
 
           <AnimatePresence>
@@ -437,8 +491,8 @@ export default function BattlePage() {
             disabled={status !== 'active'}
             placeholder={status === 'active' ? 'Type your sharpest line...' : 'Battle ended'}
           />
-          <Button type="submit" disabled={status !== 'active' || !draft.trim()} className="md:w-auto">
-            Strike
+          <Button type="submit" disabled={status !== 'active' || !draft.trim() || isMessageCoolingDown} className="md:w-auto">
+            {isMessageCoolingDown ? `Cooldown ${messageCooldownSeconds}s` : 'Strike'}
           </Button>
           <Button type="button" variant="ghost" disabled={status !== 'active'} onClick={handleSurrender} className="md:w-auto">
             Surrender

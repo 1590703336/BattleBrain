@@ -300,6 +300,78 @@ Respond with ONLY your debate reply as plain text. No JSON, no quotes, no labels
         }
     }
 
+    async generateDebateAssistReply({
+        topic,
+        myRole,
+        opponentRole,
+        draft = '',
+        lastOpponentMessage = '',
+        context = [],
+        battleState = {}
+    }) {
+        try {
+            const myHp = battleState.myHp ?? '?';
+            const opponentHp = battleState.opponentHp ?? '?';
+            const turnNumber = battleState.turnNumber ?? context.length;
+            const timeline = context
+                .slice(-10)
+                .map((entry) => `${entry.speaker === 'you' ? 'You' : 'Opponent'}: ${String(entry.content || '')}`)
+                .join('\n');
+
+            const content = await this.callWithRetry(
+                () =>
+                    this.client.chat.completions.create({
+                        model: this.model,
+                        messages: [
+                            {
+                                role: 'system',
+                                content: `You are a live debate copilot helping a user win a 1v1 debate.
+Topic: "${topic}".
+User stance: "${myRole}".
+Opponent stance: "${opponentRole}".
+
+Rules:
+- Output exactly one reply the user can send right now.
+- Keep it under 220 characters.
+- 1-2 short sentences, sharp and specific.
+- Directly rebut the opponent's latest point if available.
+- No slurs, hate speech, or threats.
+- No markdown, no labels, no quotes around the final answer.`
+                            },
+                            {
+                                role: 'user',
+                                content: `Battle state: You HP ${myHp}/100, Opponent HP ${opponentHp}/100, Turn ${turnNumber}.
+Opponent latest message: "${lastOpponentMessage || '(none yet)'}"
+Your current draft (optional): "${draft || '(empty)'}"
+
+Recent timeline:
+${timeline || '(no prior messages)'}
+
+Generate one stronger answer I can send now.`
+                            }
+                        ],
+                        temperature: 0.8,
+                        top_p: 0.9,
+                        max_tokens: 1000
+                    }),
+                2,
+                { operation: 'generateDebateAssistReply' }
+            );
+
+            if (!content) {
+                return '';
+            }
+
+            let reply = String(content).trim();
+            reply = reply.replace(/^```[\s\S]*?\n([\s\S]*?)```$/m, '$1').trim();
+            reply = reply.replace(/^["']|["']$/g, '');
+            return reply.slice(0, 220);
+        } catch (err) {
+            logger.warn({ err: err.message || err }, 'Debate assist generation failed');
+            return '';
+        }
+    }
+
     async generateBattleTopic({ playerA = 'Player A', playerB = 'Player B' } = {}) {
         try {
             const selection = TOPICS_LIST[Math.floor(Math.random() * TOPICS_LIST.length)];

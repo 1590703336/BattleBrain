@@ -7,3 +7,4 @@ export const DEMO_OPPONENT = {
 };
 
 export const MAX_HP = 100;
+export const MESSAGE_COOLDOWN_MS = 3000;

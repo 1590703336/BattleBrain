@@ -45,7 +45,13 @@ export default function MatchPage() {
 
   useEffect(() => {
     const onCards = (payload: MatchCandidate[]) => {
-      setCards(payload);
+      const prioritized = [...payload].sort((a, b) => {
+        if (a.isAi !== b.isAi) {
+          return a.isAi ? 1 : -1;
+        }
+        return b.level - a.level;
+      });
+      setCards(prioritized);
     };
 
     const onWaiting = (payload: QueueWaitingPayload) => {
@@ -194,6 +200,10 @@ export default function MatchPage() {
           <motion.div key="swipe" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
             <h1 className="mb-4 font-[var(--font-display)] text-3xl tracking-[0.08em] md:text-4xl">Swipe To Match</h1>
             <p className="mb-5 text-sm text-white/65 md:text-base">Swipe right to challenge. Swipe left to skip this card.</p>
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.1em]">
+              <span className="rounded-full border border-cyan-300/45 bg-cyan-300/20 px-3 py-1 text-cyan-100">Queue Priority: Human First</span>
+              <span className="rounded-full border border-lime-300/40 bg-lime-300/14 px-3 py-1 text-lime-100">AI Agents After</span>
+            </div>
             <CardStack cards={cards} onSwipe={onSwipe} />
             <button
               type="button"

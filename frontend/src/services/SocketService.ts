@@ -11,6 +11,7 @@ import {
   StrikeType,
 } from '../types/socket';
 import { getStoredToken, getStoredUser } from '../utils/authStorage';
+import { MESSAGE_COOLDOWN_MS } from '../utils/constants';
 
 const USE_MOCK_SOCKET = import.meta.env.VITE_USE_MOCK_SOCKET !== 'false';
 const SOCKET_URL =
@@ -364,6 +365,36 @@ class MockBattleGateway {
 
   private cards: MatchCandidate[] = [
     {
+      id: 'human_debatefox',
+      name: 'DebateFox',
+      displayName: 'DebateFox',
+      level: 17,
+      avatarUrl: '',
+      bio: 'Fast rebuttal style. Loves precision attacks on weak premises.',
+      humorStyle: 'Live Challenger',
+      isAi: false,
+    },
+    {
+      id: 'human_cobaltmint',
+      name: 'CobaltMint',
+      displayName: 'CobaltMint',
+      level: 15,
+      avatarUrl: '',
+      bio: 'Keeps calm pressure and wins through layered examples.',
+      humorStyle: 'Live Challenger',
+      isAi: false,
+    },
+    {
+      id: 'human_novaecho',
+      name: 'NovaEcho',
+      displayName: 'NovaEcho',
+      level: 13,
+      avatarUrl: '',
+      bio: 'Baits overcommitments, then counters with concise logic.',
+      humorStyle: 'Live Challenger',
+      isAi: false,
+    },
+    {
       id: 'ai_hypernova',
       name: 'HyperNova',
       displayName: 'HyperNova',
@@ -622,7 +653,7 @@ class MockBattleGateway {
       return;
     }
 
-    this.battle.cooldownUntil = Date.now() + 1200;
+    this.battle.cooldownUntil = Date.now() + MESSAGE_COOLDOWN_MS;
 
     const mine = this.buildMessage('me', payload.text);
     this.applyMessage(mine);

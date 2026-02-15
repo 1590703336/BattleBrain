@@ -1,6 +1,6 @@
-
 const User = require('../models/User');
 const { NotFoundError } = require('../utils/errors');
+const BattleService = require('../services/BattleService');
 
 class BattleController {
     /**
@@ -23,6 +23,17 @@ class BattleController {
             }
 
             res.json(user.records[0]);
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    static async generateAssistReply(req, res, next) {
+        try {
+            const { battleId } = req.params;
+            const draft = typeof req.body?.draft === 'string' ? req.body.draft : '';
+            const reply = await BattleService.generateDebateAssist(battleId, req.user.userId, draft);
+            res.json({ reply });
         } catch (err) {
             next(err);
         }

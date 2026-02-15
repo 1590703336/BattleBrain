@@ -7,6 +7,7 @@ const PresenceService = require('./PresenceService');
 const User = require('../models/User');
 const AI_BOT_PERSONAS = require('../config/aiBots');
 const SwipeService = require('./SwipeService');
+const { NotFoundError, ValidationError } = require('../utils/errors');
 
 const GOOD_STRIKE_THRESHOLD = 40;
 const TOXIC_STRIKE_THRESHOLD = 60;
@@ -63,6 +64,21 @@ function buildFlexibleFallback(topic, lastMessage) {
 
     const pick = patterns[Math.floor(Math.random() * patterns.length)];
     return pick().slice(0, 260);
+}
+
+function buildAssistFallback(topic, myRole, opponentRole, lastOpponentMessage, draft = '') {
+    const fragment = toKeywordFragment(lastOpponentMessage || draft || '');
+    const roleHint = myRole || 'your stance';
+    const enemyHint = opponentRole || 'their stance';
+
+    const options = [
+        `You call "${fragment}" proof, but it dodges the core issue: ${topic}. ${roleHint} still stands stronger than ${enemyHint}.`,
+        `Cute point on "${fragment}", but it ignores the real tradeoff in ${topic}. ${roleHint} addresses impact; ${enemyHint} just handwaves.`,
+        `If "${fragment}" is your best argument, this round is over. On ${topic}, ${roleHint} is practical and ${enemyHint} is just noise.`,
+        `You attacked style, not substance. On ${topic}, ${roleHint} answers the actual question while ${enemyHint} avoids it.`
+    ];
+
+    return options[Math.floor(Math.random() * options.length)].slice(0, 220);
 }
 
 function createDefaultStats() {
@@ -403,6 +419,57 @@ class BattleService {
         });
 
         return String(aiReply || fallbackText).slice(0, 260);
+    }
+
+    async generateDebateAssist(battleId, userId, draft = '') {
+        const battle = this.activeBattles.get(String(battleId || ''));
+        if (!battle) {
+            throw new NotFoundError('Battle not found or already ended');
+        }
+
+        const normalizedUserId = String(userId || '');
+        const me = battle.players[normalizedUserId];
+        if (!me) {
+            throw new ValidationError('You are not part of this battle');
+        }
+
+        const opponentId = Object.keys(battle.players).find((id) => id !== normalizedUserId);
+        if (!opponentId || !battle.players[opponentId]) {
+            throw new ValidationError('Opponent not found');
+        }
+
+        const opponent = battle.players[opponentId];
+        const timeline = battle.messages.slice(-10).map((message) => ({
+            speaker: message.senderId === normalizedUserId ? 'you' : 'opponent',
+            content: message.text
+        }));
+        const lastOpponentMessage = [...battle.messages]
+            .reverse()
+            .find((message) => message.senderId === opponentId)?.text || '';
+
+        const fallback = buildAssistFallback(
+            battle.topic || 'this debate',
+            me.role,
+            opponent.role,
+            lastOpponentMessage,
+            draft
+        );
+
+        const aiReply = await AIService.generateDebateAssistReply({
+            topic: battle.topic || 'this debate',
+            myRole: me.role || 'your stance',
+            opponentRole: opponent.role || 'opponent stance',
+            draft: String(draft || '').slice(0, 280),
+            lastOpponentMessage,
+            context: timeline,
+            battleState: {
+                myHp: me.hp,
+                opponentHp: opponent.hp,
+                turnNumber: battle.messages.length
+            }
+        });
+
+        return String(aiReply || fallback).trim().slice(0, 220);
     }
 
     mapEndReason(reason) {
