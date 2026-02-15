@@ -236,12 +236,7 @@ class BattleService {
             throw new Error('Empty message');
         }
 
-        const context = battle.messages.slice(-8).map((message) => ({
-            role: message.senderId === senderId ? 'user' : 'opponent',
-            content: message.text
-        }));
-
-        const rawAnalysis = await AIService.analyzeMessage(cleanedText, battle.topic, context);
+        const rawAnalysis = await AIService.analyzeMessage(cleanedText, battle.topic);
         const analysis = {
             wit: clampScore(rawAnalysis.wit),
             relevance: clampScore(rawAnalysis.relevance),

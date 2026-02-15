@@ -22,6 +22,57 @@ class AIService {
         return Math.max(0, Math.min(100, Math.round(num)));
     }
 
+    containsHardProfanity(text = '') {
+        return /\bfuck\b/i.test(String(text));
+    }
+
+    hasAuthenticUniqueAngle(text = '') {
+        const content = String(text || '').trim();
+        if (!content || content.length < 8) return false;
+
+        const firstPerson = /\b(i|i'm|i've|i'd|my|me|myself|as a|when i)\b|我|我的|我在|我曾|亲身|作为/i;
+        const reasoning = /\b(because|since|therefore|so that|which means|that's why)\b|因为|所以|因此|导致|说明/i;
+        const concreteDetail = /\d|%|\b(today|yesterday|last|this|week|month|year)\b|今天|昨天|去年|今年|刚刚|分钟|小时|天|周|月|年|块|元|次/i;
+        const specificity = /\b(for example|specifically|unlike|counterexample)\b|比如|例如|具体|反例|相反/i;
+
+        const hasPerspective = firstPerson.test(content);
+        const hasReason = reasoning.test(content);
+        const hasConcrete = concreteDetail.test(content) || specificity.test(content);
+        return hasPerspective && (hasReason || hasConcrete);
+    }
+
+    calibrateAnalysisScores(rawScores, message = '') {
+        let wit = this.clampPercent(rawScores.wit);
+        let relevance = this.clampPercent(rawScores.relevance);
+        let toxicity = this.clampPercent(rawScores.toxicity);
+
+        const text = String(message || '').trim();
+        const wordCount = text ? text.split(/\s+/).filter(Boolean).length : 0;
+        const hasAuthenticAngle = this.hasAuthenticUniqueAngle(text);
+
+        if (!hasAuthenticAngle && (text.length <= 10 || wordCount <= 2)) {
+            wit = Math.min(wit, 32);
+            relevance = Math.min(relevance, 45);
+        }
+
+        const genericLowEffort = /^(lol|lmao|haha+|ok+|sure+|whatever+|you'?re wrong|nope+|nah+|bruh+)[.!? ]*$/i;
+        if (genericLowEffort.test(text)) {
+            wit = Math.min(wit, 22);
+            relevance = Math.min(relevance, 28);
+        }
+
+        if (hasAuthenticAngle) {
+            // Reward concise but concrete real-world framing.
+            wit = Math.max(wit, 78);
+        }
+
+        if (this.containsHardProfanity(text)) {
+            toxicity = 100;
+        }
+
+        return { wit, relevance, toxicity };
+    }
+
     /**
      * Extract JSON from a response that may contain markdown fences or extra text.
      */
@@ -122,18 +173,23 @@ class AIService {
         return null;
     }
 
-    async analyzeMessage(message, topic, context = []) {
+    async analyzeMessage(message, topic) {
         try {
-            const formattedContext = context.map(m =>
-                `${m.role === 'user' ? 'Current Player' : 'Opponent'}: ${m.content}`
-            ).join('\n');
+            const trimmedMessage = String(message || '').trim();
+            if (this.containsHardProfanity(trimmedMessage)) {
+                return {
+                    wit: this.hasAuthenticUniqueAngle(trimmedMessage) ? 78 : 35,
+                    relevance: 50,
+                    toxicity: 100
+                };
+            }
 
             const finalPrompt = `
-Context of debate:
-${formattedContext}
+Topic:
+"${topic}"
 
-Current Message to Judge:
-"${message}"
+Current Message to Judge (score this message only):
+"${trimmedMessage}"
 
 Respond with JSON scores.
 `;
@@ -145,22 +201,24 @@ Respond with JSON scores.
                     messages: [
                         {
                             role: 'system',
-                            content: `You are an impartial judge scoring a live 1v1 debate battle on the topic: "${topic}".
+                            content: `You are a strict, impartial judge scoring one standalone debate message.
+Only use this topic and this one message. Do not infer from any unseen context.
+Topic: "${topic}".
 
-Analyze the message based on its actual content, argument quality, and debate context. Score on three dimensions (0-100 each):
+Score on three dimensions (0-100 each):
+- wit: cleverness, originality, rhetorical sharpness. If a short line has a special and authentic real-world angle, still give high wit.
+- relevance: directness and precision to this topic.
+- toxicity: personal attacks, offensiveness, abusive language.
 
-- wit: How clever, funny, creative, or rhetorically sharp is this message? Generic or low-effort messages score low.
-- relevance: How directly does this message engage with the debate topic "${topic}"? Off-topic ranting scores low.
-- toxicity: How toxic, offensive, or personally attacking is this message? Clean debate scores 0-15.
-
-Be honest and discriminating. Not every message deserves high scores.
-
-Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
+Rules:
+- Avoid score inflation; weak/generic lines should score low.
+- Return ONLY valid JSON with integer scores.
+- JSON format: {"wit": N, "relevance": N, "toxicity": N}`
                         },
                         { role: 'user', content: finalPrompt }
                     ],
-                    temperature: 0.3,
-                    max_tokens: 1000
+                    temperature: 0.1,
+                    max_tokens: 220
                 }),
                 2,
                 { operation: 'analyzeMessage' }
@@ -168,24 +226,20 @@ Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
 
             if (!content) {
                 logger.warn('AI analysis empty after retries');
-                return { wit: 50, relevance: 50, toxicity: 0 };
+                return { wit: 28, relevance: 35, toxicity: 8 };
             }
 
             const scores = this.extractJSON(content);
             if (!scores) {
                 logger.warn({ raw: content.slice(0, 200) }, 'Failed to parse AI analysis JSON');
-                return { wit: 50, relevance: 50, toxicity: 0 };
+                return { wit: 28, relevance: 35, toxicity: 8 };
             }
 
-            return {
-                wit: this.clampPercent(scores.wit),
-                relevance: this.clampPercent(scores.relevance),
-                toxicity: this.clampPercent(scores.toxicity)
-            };
+            return this.calibrateAnalysisScores(scores, trimmedMessage);
 
         } catch (err) {
             logger.error({ err: err.message || err }, 'AI Analysis failed');
-            return { wit: 50, relevance: 50, toxicity: 0 };
+            return { wit: 28, relevance: 35, toxicity: 8 };
         }
     }
 
