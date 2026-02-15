@@ -164,6 +164,32 @@ class BattleService {
         };
     }
 
+    buildBattleStartPayloadForPlayer(battleData, playerId) {
+        const players = battleData?.players || {};
+        const normalizedPlayerId = String(playerId || '');
+        const myEntry = players[normalizedPlayerId];
+        const opponentId = Object.keys(players).find((id) => id !== normalizedPlayerId) || '';
+        const opponentEntry = players[opponentId];
+        const opponentUser = opponentEntry?.user || {};
+        const durationSec = Number.isFinite(Number(battleData?.durationSec))
+            ? Math.max(1, Math.round(Number(battleData.durationSec)))
+            : Math.max(1, Math.round(Number(battleData?.duration || 90)));
+
+        return {
+            battleId: String(battleData?.battleId || battleData?.id || ''),
+            topic: String(battleData?.topic || 'Unknown Topic'),
+            durationSec,
+            selfId: normalizedPlayerId,
+            opponent: {
+                id: String(opponentUser.id || opponentId || ''),
+                name: String(opponentUser.displayName || opponentUser.name || 'Unknown'),
+                level: Math.max(1, Number(opponentUser.level || 1))
+            },
+            myRole: String(myEntry?.role || ''),
+            opponentRole: String(opponentEntry?.role || '')
+        };
+    }
+
     normalizePlayer(player) {
         const id = String(player.id || player._id || '');
         const email = typeof player.email === 'string' ? player.email.toLowerCase() : '';

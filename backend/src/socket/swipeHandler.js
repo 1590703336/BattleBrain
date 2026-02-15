@@ -65,7 +65,7 @@ module.exports = (io, socket) => {
                 }
 
                 const battleData = BattleService.createBattle(user, result.data.opponent, topic);
-                socket.emit('battle-start', battleData);
+                socket.emit('battle-start', BattleService.buildBattleStartPayloadForPlayer(battleData, user.id));
                 return;
             }
 
@@ -147,8 +147,11 @@ module.exports = (io, socket) => {
             }
 
             const battleData = BattleService.createBattle(request.from, user, topic);
-            io.to(requesterStillOnline).emit('battle-start', battleData);
-            socket.emit('battle-start', battleData);
+            io.to(requesterStillOnline).emit(
+                'battle-start',
+                BattleService.buildBattleStartPayloadForPlayer(battleData, request.from.id)
+            );
+            socket.emit('battle-start', BattleService.buildBattleStartPayloadForPlayer(battleData, user.id));
         } catch (err) {
             logger.error({ err, userId: user.id, requestId }, 'Accept battle failed');
             socket.emit('battle-request-timeout', {

@@ -130,8 +130,8 @@ class MatchmakingService {
         ]);
         const battleData = BattleService.createBattle(player1.user, player2.user, topic);
 
-        io.to(player1.socketId).emit('battle-start', battleData);
-        io.to(player2.socketId).emit('battle-start', battleData);
+        io.to(player1.socketId).emit('battle-start', BattleService.buildBattleStartPayloadForPlayer(battleData, player1.userId));
+        io.to(player2.socketId).emit('battle-start', BattleService.buildBattleStartPayloadForPlayer(battleData, player2.userId));
 
         this.broadcastQueueWaiting();
     }
@@ -200,7 +200,7 @@ class MatchmakingService {
         ]);
         const battleData = BattleService.createBattle(player.user, botUser, topic);
 
-        io.to(player.socketId).emit('battle-start', battleData);
+        io.to(player.socketId).emit('battle-start', BattleService.buildBattleStartPayloadForPlayer(battleData, player.userId));
         this.broadcastQueueWaiting();
     }
 }

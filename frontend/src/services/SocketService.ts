@@ -187,7 +187,8 @@ class SocketService {
   private normalizeBattleStart(payload: unknown): BattleStartPayload {
     const raw = (payload || {}) as Record<string, unknown>;
     const battleId = String(raw.battleId || raw.id || '');
-    const myId = this.getCurrentUserId();
+    const selfId = String(raw.selfId || raw.viewerId || '');
+    const myId = selfId || this.getCurrentUserId();
 
     let opponent = {
       id: '',
@@ -225,12 +226,12 @@ class SocketService {
       startedAt: Number(raw.startTime) > 0 ? Number(raw.startTime) : Date.now(),
     };
 
-    let myRole = '';
-    let opponentRole = '';
+    let myRole = typeof raw.myRole === 'string' ? raw.myRole : '';
+    let opponentRole = typeof raw.opponentRole === 'string' ? raw.opponentRole : '';
     if (raw.players && typeof raw.players === 'object') {
       const p = raw.players as Record<string, { role?: string }>;
-      myRole = String(p[myId]?.role || '');
-      opponentRole = String(p[opponent.id]?.role || '');
+      myRole = myRole || String(p[myId]?.role || '');
+      opponentRole = opponentRole || String(p[opponent.id]?.role || '');
     }
 
     return {
