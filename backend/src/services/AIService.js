@@ -23,7 +23,7 @@ class AIService {
     }
 
     containsHardProfanity(text = '') {
-        return /\bfuck\b/i.test(String(text));
+        return /fuck/i.test(String(text));
     }
 
     hasAuthenticUniqueAngle(text = '') {
@@ -173,9 +173,13 @@ class AIService {
         return null;
     }
 
-    async analyzeMessage(message, topic) {
+    async analyzeMessage(message, topic, context = []) {
         try {
             const trimmedMessage = String(message || '').trim();
+            const formattedContext = context.map(m =>
+                `${m.role === 'user' ? 'Current Player' : 'Opponent'}: ${m.content}`
+            ).join('\n');
+
             if (this.containsHardProfanity(trimmedMessage)) {
                 return {
                     wit: this.hasAuthenticUniqueAngle(trimmedMessage) ? 78 : 35,
@@ -185,10 +189,10 @@ class AIService {
             }
 
             const finalPrompt = `
-Topic:
-"${topic}"
+Context of debate:
+${formattedContext}
 
-Current Message to Judge (score this message only):
+Current Message to Judge:
 "${trimmedMessage}"
 
 Respond with JSON scores.
@@ -201,24 +205,22 @@ Respond with JSON scores.
                     messages: [
                         {
                             role: 'system',
-                            content: `You are a strict, impartial judge scoring one standalone debate message.
-Only use this topic and this one message. Do not infer from any unseen context.
-Topic: "${topic}".
+                            content: `You are an impartial judge scoring a live 1v1 debate battle on the topic: "${topic}".
 
-Score on three dimensions (0-100 each):
-- wit: cleverness, originality, rhetorical sharpness. If a short line has a special and authentic real-world angle, still give high wit.
-- relevance: directness and precision to this topic.
-- toxicity: personal attacks, offensiveness, abusive language.
+Analyze the message based on its actual content, argument quality, and debate context. Score on three dimensions (0-100 each):
 
-Rules:
-- Avoid score inflation; weak/generic lines should score low.
-- Return ONLY valid JSON with integer scores.
-- JSON format: {"wit": N, "relevance": N, "toxicity": N}`
+- wit: How clever, funny, creative, or rhetorically sharp is this message? Generic or low-effort messages score low.
+- relevance: How directly does this message engage with the debate topic "${topic}"? Off-topic ranting scores low.
+- toxicity: How toxic, offensive, or personally attacking is this message? Clean debate scores 0-15.
+
+Be honest and discriminating. Not every message deserves high scores.
+
+Respond with ONLY valid JSON: {"wit": N, "relevance": N, "toxicity": N}`
                         },
                         { role: 'user', content: finalPrompt }
                     ],
-                    temperature: 0.1,
-                    max_tokens: 220
+                    temperature: 0.3,
+                    max_tokens: 1000
                 }),
                 2,
                 { operation: 'analyzeMessage' }

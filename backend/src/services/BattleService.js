@@ -236,12 +236,20 @@ class BattleService {
             throw new Error('Empty message');
         }
 
-        const rawAnalysis = await AIService.analyzeMessage(cleanedText, battle.topic);
+        const hasHardProfanity = /fuck/i.test(cleanedText);
+        const context = battle.messages.slice(-8).map((message) => ({
+            role: message.senderId === senderId ? 'user' : 'opponent',
+            content: message.text
+        }));
+        const rawAnalysis = await AIService.analyzeMessage(cleanedText, battle.topic, context);
         const analysis = {
             wit: clampScore(rawAnalysis.wit),
             relevance: clampScore(rawAnalysis.relevance),
             toxicity: clampScore(rawAnalysis.toxicity)
         };
+        if (hasHardProfanity) {
+            analysis.toxicity = 100;
+        }
 
         let damage = 0;
         let strikeType = 'neutral';
@@ -249,7 +257,9 @@ class BattleService {
 
         if (analysis.toxicity >= TOXIC_STRIKE_THRESHOLD) {
             strikeType = 'toxic';
-            damage = Math.min(INITIAL_HP, Math.max(0, Math.round(clampScore(analysis.toxicity) * 0.2)));
+            const baseToxicDamage = Math.max(0, Math.round(clampScore(analysis.toxicity) * 0.2));
+            const toxicMultiplier = hasHardProfanity ? 10 : 1;
+            damage = Math.min(INITIAL_HP, baseToxicDamage * toxicMultiplier);
             damageTarget = 'me';
             battle.players[senderId].hp = Math.max(0, battle.players[senderId].hp - damage);
         } else if (analysis.relevance <= 15) {
