@@ -177,6 +177,11 @@ export default function BattlePage() {
 
     const onRateLimited = (payload: { retryAfterMs: number; reason?: string }) => {
       setSending(false);
+      if (payload.reason === 'message_turn') {
+        setWaitingOpponent(true);
+        setToast('Wait for opponent message before your next strike.');
+        return;
+      }
       setWaitingOpponent(false);
       setMessageCooldownUntil((current) => Math.max(current, Date.now() + Math.max(0, payload.retryAfterMs || 0)));
       if (payload.reason === 'message_too_long') {
@@ -298,6 +303,10 @@ export default function BattlePage() {
     if (!draft.trim() || !battleId || status !== 'active') {
       return;
     }
+    if (waitingOpponent) {
+      setToast('Wait for opponent message before your next strike.');
+      return;
+    }
     if (Date.now() < messageCooldownUntil) {
       setToast(`Cooldown active: retry in ${messageCooldownSeconds}s.`);
       return;
@@ -312,7 +321,7 @@ export default function BattlePage() {
       text: decorated.slice(0, 280),
     });
     setSending(true);
-    setWaitingOpponent(false);
+    setWaitingOpponent(true);
     setDraft('');
     setAssistantReply('');
   };
@@ -491,8 +500,8 @@ export default function BattlePage() {
             disabled={status !== 'active'}
             placeholder={status === 'active' ? 'Type your sharpest line...' : 'Battle ended'}
           />
-          <Button type="submit" disabled={status !== 'active' || !draft.trim() || isMessageCoolingDown} className="md:w-auto">
-            {isMessageCoolingDown ? `Cooldown ${messageCooldownSeconds}s` : 'Strike'}
+          <Button type="submit" disabled={status !== 'active' || !draft.trim() || isMessageCoolingDown || waitingOpponent} className="md:w-auto">
+            {waitingOpponent ? 'Wait Opponent' : isMessageCoolingDown ? `Cooldown ${messageCooldownSeconds}s` : 'Strike'}
           </Button>
           <Button type="button" variant="ghost" disabled={status !== 'active'} onClick={handleSurrender} className="md:w-auto">
             Surrender

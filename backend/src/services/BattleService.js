@@ -224,6 +224,13 @@ class BattleService {
             throw new Error('Opponent not found');
         }
 
+        const lastMessage = battle.messages[battle.messages.length - 1];
+        if (lastMessage?.senderId === senderId) {
+            const turnError = new ValidationError('Wait for opponent response before sending again');
+            turnError.code = 'message_turn';
+            throw turnError;
+        }
+
         const cleanedText = String(text || '').trim();
         if (!cleanedText) {
             throw new Error('Empty message');

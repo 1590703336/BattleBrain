@@ -28,22 +28,23 @@ function strikeTone(strikeType: StrikeType) {
 }
 
 export default function ChatMessage({ role, strikeType, damage, scores, text, ts }: ChatMessageProps) {
-  const align = role === 'me' ? 'items-end' : role === 'system' ? 'items-center' : 'items-start';
+  const rowAlign = role === 'me' ? 'justify-end' : role === 'system' ? 'justify-center' : 'justify-start';
+  const textAlign = role === 'me' ? 'text-right' : role === 'system' ? 'text-center' : 'text-left';
 
   return (
     <motion.article
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.16 }}
-      className={`flex ${align}`}
+      className={`flex w-full ${rowAlign}`}
     >
       <div className={`max-w-[90%] rounded-2xl border px-3 py-2 text-sm md:max-w-[75%] ${strikeTone(strikeType)}`}>
-        <div className="mb-1 text-xs uppercase tracking-[0.12em] text-white/65">
+        <div className={`mb-1 text-xs uppercase tracking-[0.12em] text-white/65 ${textAlign}`}>
           {role === 'me' ? 'You' : role === 'opponent' ? 'Opponent' : 'System'} • {new Date(ts).toLocaleTimeString()}
         </div>
-        <p className="whitespace-pre-wrap break-words leading-relaxed">{text}</p>
+        <p className={`whitespace-pre-wrap break-words leading-relaxed ${textAlign}`}>{text}</p>
         {role !== 'system' ? (
-          <div className="mt-2 flex gap-3 text-[11px] text-white/65">
+          <div className={`mt-2 flex gap-3 text-[11px] text-white/65 ${role === 'me' ? 'justify-end' : 'justify-start'}`}>
             <span>Dmg {damage}</span>
             <span>Wit {scores.wit}%</span>
             <span>Rel {scores.relevance}%</span>

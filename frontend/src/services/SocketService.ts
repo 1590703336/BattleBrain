@@ -456,6 +456,7 @@ class MockBattleGateway {
     opponentHp: number;
     timer: number;
     cooldownUntil: number;
+    nextTurn: 'me' | 'opponent';
     finished: boolean;
     opponent: {
       id: string;
@@ -639,6 +640,7 @@ class MockBattleGateway {
       opponentHp: 100,
       timer: 90,
       cooldownUntil: 0,
+      nextTurn: 'me',
       finished: false,
       opponent,
     };
@@ -659,7 +661,16 @@ class MockBattleGateway {
       return;
     }
 
+    if (this.battle.nextTurn !== 'me') {
+      this.emitServerEvent('rate-limited', {
+        retryAfterMs: 0,
+        reason: 'message_turn',
+      });
+      return;
+    }
+
     this.battle.cooldownUntil = Date.now() + MESSAGE_COOLDOWN_MS;
+    this.battle.nextTurn = 'opponent';
 
     const mine = this.buildMessage('me', payload.text);
     this.applyMessage(mine);
@@ -679,6 +690,7 @@ class MockBattleGateway {
     const enemyText = this.enemyReplies()[Math.floor(Math.random() * this.enemyReplies().length)];
     const enemy = this.buildMessage('opponent', enemyText);
     this.applyMessage(enemy);
+    this.battle.nextTurn = 'me';
     this.emitServerEvent('battle-message', {
       message: enemy,
       snapshot: this.snapshot(),

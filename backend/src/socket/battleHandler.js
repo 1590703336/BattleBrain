@@ -9,6 +9,7 @@ module.exports = (io, socket) => {
     const user = socket.user;
 
     socket.on('send-message', async ({ battleId, text }) => {
+        let previousLastTime = 0;
         try {
             // 1. Validation
             if (!text || !text.trim()) return;
@@ -19,6 +20,7 @@ module.exports = (io, socket) => {
 
             // 2. Rate Limiting
             const lastTime = lastMessageTimes.get(user.id) || 0;
+            previousLastTime = lastTime;
             const now = Date.now();
             const cooldownRemaining = MESSAGE_COOLDOWN_MS - (now - lastTime);
 
@@ -36,6 +38,18 @@ module.exports = (io, socket) => {
             await BattleService.sendMessage(battleId, user.id, text);
 
         } catch (err) {
+            if (err?.code === 'message_turn') {
+                if (previousLastTime > 0) {
+                    lastMessageTimes.set(user.id, previousLastTime);
+                } else {
+                    lastMessageTimes.delete(user.id);
+                }
+                socket.emit('rate-limited', {
+                    retryAfterMs: 0,
+                    reason: 'message_turn'
+                });
+                return;
+            }
             logger.error({ err, battleId }, 'Send message failed');
         }
     });
