@@ -446,6 +446,8 @@ class MockBattleGateway {
     },
   ];
 
+  private readonly seedCards: MatchCandidate[] = this.cards.map((card) => ({ ...card }));
+
   private battle: {
     battleId: string;
     topic: string;
@@ -516,6 +518,9 @@ class MockBattleGateway {
     payload: Parameters<ClientToServerEvents[K]>[0]
   ) {
     if (event === 'get-cards') {
+      if (this.cards.length === 0) {
+        this.cards = this.seedCards.map((card) => ({ ...card }));
+      }
       this.emitServerEvent('online-users', [...this.cards]);
       return;
     }

@@ -19,6 +19,7 @@ export default function MatchPage() {
   const [lockedCandidateName, setLockedCandidateName] = useState('');
   const [incomingRequest, setIncomingRequest] = useState<BattleRequestPayload | null>(null);
   const [toast, setToast] = useState('');
+  const [didAutoLoop, setDidAutoLoop] = useState(false);
 
   const { queueStatus, etaSec, statusText, setQueueStatus, setWaitingMeta, reset } = useMatchStore(
     useShallow((state) => ({
@@ -126,6 +127,26 @@ export default function MatchPage() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  useEffect(() => {
+    if (phase !== 'swipe') {
+      setDidAutoLoop(false);
+      return;
+    }
+
+    if (cards.length > 0) {
+      setDidAutoLoop(false);
+      return;
+    }
+
+    if (didAutoLoop) {
+      return;
+    }
+
+    setDidAutoLoop(true);
+    setToast('Cards exhausted. Looping queue again...');
+    refreshCards();
+  }, [cards.length, didAutoLoop, phase, socket]);
+
   const onSwipe = (direction: 'left' | 'right', candidate: MatchCandidate) => {
     setCards((current) => current.filter((item) => item.id !== candidate.id));
 
@@ -159,6 +180,12 @@ export default function MatchPage() {
     }
 
     onSwipe('right', firstCard);
+  };
+
+  const onRefreshQueue = () => {
+    setDidAutoLoop(false);
+    setToast('Refreshing queue...');
+    refreshCards();
   };
 
   const onCancel = () => {
@@ -205,13 +232,22 @@ export default function MatchPage() {
               <span className="rounded-full border border-lime-300/40 bg-lime-300/14 px-3 py-1 text-lime-100">AI Agents After</span>
             </div>
             <CardStack cards={cards} onSwipe={onSwipe} />
-            <button
-              type="button"
-              onClick={onQuickMatch}
-              className="mt-4 w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              Quick Match With {fallbackName}
-            </button>
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={onQuickMatch}
+                className="w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                Quick Match With {fallbackName}
+              </button>
+              <button
+                type="button"
+                onClick={onRefreshQueue}
+                className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/12 px-4 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20"
+              >
+                Refresh Queue
+              </button>
+            </div>
           </motion.div>
         ) : (
           <motion.div key="queue" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>

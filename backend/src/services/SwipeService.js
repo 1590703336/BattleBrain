@@ -107,12 +107,21 @@ class SwipeService {
         return [...cards].sort(() => Math.random() - 0.5);
     }
 
-    async getCards(userId) {
-        const aiCards = await this.ensureAiUsers();
-        const onlineUsers = PresenceService.getOnlineUsers(userId)
-            .filter((entry) => !this.aiCardsById.has(String(entry.id || entry._id || '')));
+    clearSwipedPairsForUser(userId) {
+        const normalizedUserId = String(userId || '');
+        if (!normalizedUserId) {
+            return;
+        }
 
-        const humanCards = onlineUsers.map((entry) => this.toCardPayload(entry, 'Live Challenger', false));
+        for (const pairId of [...this.swipedPairs]) {
+            const [left, right] = pairId.split(':');
+            if (left === normalizedUserId || right === normalizedUserId) {
+                this.swipedPairs.delete(pairId);
+            }
+        }
+    }
+
+    buildPrioritizedCards(userId, humanCards, aiCards) {
         const availableHumans = humanCards
             .filter((entry) => String(entry.id) !== String(userId))
             .filter((entry) => !this.swipedPairs.has(this._getPairId(userId, entry.id)));
@@ -121,7 +130,23 @@ class SwipeService {
             .filter((entry) => !this.swipedPairs.has(this._getPairId(userId, entry.id)));
 
         // Queue/swipe ordering rule: show humans first, AI agents after.
-        const prioritized = [...this.shuffleCards(availableHumans), ...this.shuffleCards(availableAi)];
+        return [...this.shuffleCards(availableHumans), ...this.shuffleCards(availableAi)];
+    }
+
+    async getCards(userId) {
+        const aiCards = await this.ensureAiUsers();
+        const onlineUsers = PresenceService.getOnlineUsers(userId)
+            .filter((entry) => !this.aiCardsById.has(String(entry.id || entry._id || '')));
+
+        const humanCards = onlineUsers.map((entry) => this.toCardPayload(entry, 'Live Challenger', false));
+        let prioritized = this.buildPrioritizedCards(userId, humanCards, aiCards);
+
+        // If deck is exhausted, clear swipe history for this user and loop again.
+        if (prioritized.length === 0 && (humanCards.length > 0 || aiCards.length > 0)) {
+            this.clearSwipedPairsForUser(userId);
+            prioritized = this.buildPrioritizedCards(userId, humanCards, aiCards);
+        }
+
         const deckSize = Math.max(1, Number(config.swipeDeckSize || 20));
         return prioritized.slice(0, deckSize);
     }
